@@ -115,5 +115,5 @@ def cli_main():
 if __name__ == '__main__':
     task = Task.init(project_name="Tests", task_name="running_test", tags="graphormer")
     logger = task.get_logger()
-    logger.report_scalar(title='just a test', series='test', value=1, iteration=epoch)
+    # logger.report_scalar(title='just a test', series='test', value=1, iteration=epoch)
     cli_main()
