@@ -2,7 +2,7 @@
 # Licensed under the MIT License.
 
 from collator import collator
-from wrapper import MyGraphPropPredDataset, MyPygPCQM4MDataset, MyZINCDataset
+from wrapper import MyGraphPropPredDataset, MyPygPCQM4MDataset, MyZINCDataset, MyQSARDataset
 
 from pytorch_lightning import LightningDataModule
 import torch
@@ -50,7 +50,7 @@ def get_dataset(dataset_name='abaaba'):
             'metric': 'mae',
             'metric_mode': 'min',
             'evaluator': ogb.lsc.PCQM4MEvaluator(),
-            'dataset': MyPygPCQM4MDataset(root='../../dataset'),
+            'dataset': MyPygPCQM4MDataset(root='../../dataset')[:1000],
             'max_node': 128,
         }
     elif dataset_name == 'ZINC':
@@ -65,7 +65,19 @@ def get_dataset(dataset_name='abaaba'):
             'test_dataset': MyZINCDataset(subset=True, root='../../dataset/pyg_zinc', split='test'),
             'max_node': 128,
         }
+    elif dataset_name == 'qsar':
+        dataset = {
+            'num_class': 1,
+            'loss_fn': F.l1_loss,
+            'metric': 'mae',
+            'metric_mode': 'min',
+            'evaluator': ogb.lsc.PCQM4MEvaluator(),  # same objective function, so reuse it
+            'dataset': MyQSARDataset(root='../../dataset/qsar'),
+            'max_node': 128,
+        }
+
     else:
+        print(f'dataset_name:{dataset_name}')
         raise NotImplementedError
 
     print(f' > {dataset_name} loaded!')
