@@ -1,15 +1,179 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
-
+import os
 import torch
 import numpy as np
 import torch_geometric.datasets
+from torch_geometric.data import InMemoryDataset
+from torch_geometric.data import Data
 from ogb.graphproppred import PygGraphPropPredDataset
 from ogb.lsc.pcqm4m_pyg import PygPCQM4MDataset
 import pyximport
+import pandas as pd
+import os.path as osp
+from tqdm import tqdm
+from rdkit import Chem
+from rdkit.Chem import AllChem
+from rdkit.Chem.rdMolDescriptors import GetMorganFingerprintAsBitVect
+from ogb.utils import smiles2graph as ogb_smiles2graph
 
 pyximport.install(setup_args={'include_dirs': np.get_include()})
 import algos
+
+pattern_dict = {'[NH-]': '[N-]'}
+
+
+def smiles_cleaner(smiles):
+    '''
+    this function is to clean smiles for some known issues that makes rdkit:Chem.MolFromSmiles not working
+    '''
+    print('fixing smiles for rdkit...')
+    new_smiles = smiles
+    for pattern, replace_value in pattern_dict.items():
+        if pattern in smiles:
+            print('found pattern and fixed the smiles!')
+            new_smiles = smiles.replace(pattern, replace_value)
+    return new_smiles
+
+def generate_element_rep_list(elements):
+
+    print('calculating rdkit element representation lookup table')
+    elem_rep_lookup = []
+    for elem in elements:
+        pt = Chem.GetPeriodicTable()
+
+        if isinstance(elem, int):
+            num = elem
+            sym = pt.GetElementSymbol(num)
+        else:
+            num = pt.GetAtomicNumber(elem)
+            sym = elem
+        w = pt.GetAtomicWeight(elem)
+
+        Rvdw = pt.GetRvdw(elem)
+    #     Rcoval = pt.GetRCovalent(elem)
+        valence = pt.GetDefaultValence(elem)
+        outer_elec = pt.GetNOuterElecs(elem)
+
+        elem_rep = [num, w, Rvdw, valence, outer_elec]
+#             print(elem_rep)
+
+        elem_rep_lookup.append(elem_rep)
+    elem_lst = elem_rep_lookup.copy()
+    return elem_rep_lookup
+
+
+max_elem_num = 118
+element_nums = [x + 1 for x in range(max_elem_num)]
+elem_lst = generate_element_rep_list(element_nums)
+
+
+def get_atom_rep(atomic_num):
+    '''use rdkit to generate atom representation
+    '''
+    global elem_lst
+
+    result = 0
+    try:
+        result = elem_lst[atomic_num - 1]
+    except:
+        print(f'error: atomic_num {atomic_num} does not exist')
+
+    return result
+
+
+def smiles2graph(D, smiles):
+    if D == None:
+        raise Exception(
+            'smiles2grpah() needs to input D to specifiy 2D or 3D graph generation.')
+    # print(f'smiles:{smiles}')
+    # default RDKit behavior is to reject hypervalent P, so you need to set sanitize=False. Search keyword = 'Explicit Valence Error - Partial Sanitization' on https://www.rdkit.org/docs/Cookbook.html for more info
+    smiles = smiles.replace(r'/=', '=')
+    smiles = smiles.replace(r'\=', '=')
+    try:
+        mol = Chem.MolFromSmiles(smiles, sanitize=True)
+    except Exception as e:
+        print(f'Cannot generate mol, error:{e}, smiles:{smiles}')
+
+    if mol is None:
+        smiles = smiles_cleaner(smiles)
+        try:
+            mol = Chem.MolFromSmiles(smiles, sanitize=True)
+        except Exception as e:
+            print(f'Generated mol is None, error:{e}, smiles:{smiles}')
+            return None
+    try:
+        # mol.UpdatePropertyCache(strict=False)
+        mol = Chem.AddHs(mol)
+    except Exception as e:
+        print(f'{e}, smiles:{smiles}')
+
+    if D == 2:
+        Chem.rdDepictor.Compute2DCoords(mol)
+    if D == 3:
+        AllChem.EmbedMolecule(mol)
+        AllChem.UFFOptimizeMolecule(mol)
+
+    conf = mol.GetConformer()
+
+    atom_pos = []
+    atom_attr = []
+
+    # get atom attributes and positions
+    for i, atom in enumerate(mol.GetAtoms()):
+        atomic_num = atom.GetAtomicNum()
+        h = get_atom_rep(atomic_num)
+
+        if D == 2:
+            atom_pos.append([conf.GetAtomPosition(i).x, conf.GetAtomPosition(i).y])
+        elif D == 3:
+            atom_pos.append([conf.GetAtomPosition(
+                i).x, conf.GetAtomPosition(i).y, conf.GetAtomPosition(i).z])
+        atom_attr.append(h)
+
+    # get bond attributes
+    edge_list = []
+    edge_attr_list = []
+    for idx, edge in enumerate(mol.GetBonds()):
+        i = edge.GetBeginAtomIdx()
+        j = edge.GetEndAtomIdx()
+
+        bond_attr = None
+        bond_type = edge.GetBondType()
+        if bond_type == Chem.rdchem.BondType.SINGLE:
+            bond_attr = [1]
+        elif bond_type == Chem.rdchem.BondType.DOUBLE:
+            bond_attr = [2]
+        elif bond_type == Chem.rdchem.BondType.TRIPLE:
+            bond_attr = [3]
+        elif bond_type == Chem.rdchem.BondType.AROMATIC:
+            bond_attr = [4]
+
+        edge_list.append((i, j))
+        edge_attr_list.append(bond_attr)
+#         print(f'i:{i} j:{j} bond_attr:{bond_attr}')
+
+        edge_list.append((j, i))
+        edge_attr_list.append(bond_attr)
+#         print(f'j:{j} j:{i} bond_attr:{bond_attr}')
+
+    x = torch.tensor(atom_attr)
+    p = torch.tensor(atom_pos)
+    edge_index = torch.tensor(edge_list).t().contiguous()
+    edge_attr = torch.tensor(edge_attr_list)
+
+    # graphormer-specific features
+    # adj = torch.zeros([N, N], dtype=torch.bool)
+    # adj[edge_index[0, :], edge_index[1, :]] = True
+    # attn_bias = torch.zeros(
+    #     [N + 1, N + 1], dtype=torch.float)  # with graph token
+    # attn_edge_type = torch.zeros([N, N, edge_attr.size(-1)], dtype=torch.long)
+    # attn_edge_type[edge_index[0, :], edge_index[1, :]
+    #                ] = convert_to_single_emb(edge_attr) + 1
+
+    data = Data(x=x, p=p, edge_index=edge_index, edge_attr=edge_attr)  # , adj=adj, attn_bias=attn_bias, attn_edge_type=attn_edge_type)
+    # data = preprocess_item(data)
+    return data
 
 
 def convert_to_single_emb(x, offset=512):
@@ -77,7 +241,77 @@ class MyPygPCQM4MDataset(PygPCQM4MDataset):
         super(MyPygPCQM4MDataset, self).download()
 
     def process(self):
-        super(MyPygPCQM4MDataset, self).process()
+        # super(MyPygPCQM4MDataset, self).process()
+        data_df = pd.read_csv(osp.join(self.raw_dir, 'data.csv.gz')).head(100)
+        smiles_list = data_df['smiles']
+        homolumogap_list = data_df['homolumogap']
+
+        print('Converting SMILES strings into graphs...')
+        data_list = []
+        for i in tqdm(range(len(smiles_list))):
+            data = Data()
+
+            smiles = smiles_list[i]
+            homolumogap = homolumogap_list[i]
+            graph = self.smiles2graph(smiles)
+
+            assert(len(graph['edge_feat']) == graph['edge_index'].shape[1])
+            assert(len(graph['node_feat']) == graph['num_nodes'])
+
+            data.__num_nodes__ = int(graph['num_nodes'])
+            data.edge_index = torch.from_numpy(graph['edge_index']).to(torch.int64)
+            data.edge_attr = torch.from_numpy(graph['edge_feat']).to(torch.int64)
+            data.x = torch.from_numpy(graph['node_feat']).to(torch.int64)
+            data.y = torch.Tensor([homolumogap])
+
+            data_list.append(data)
+
+        # double-check prediction target
+        split_dict = self.get_idx_split()
+        dict_train = split_dict['train']
+        dict_val = split_dict['valid']
+        dict_test = split_dict['test']
+        print(f'train len:{len(dict_train)}')
+        print(f'val len:{len(dict_val)}')
+        print(f'test len:{len(dict_test)}')
+        # for i in dict_test[:20]:
+        #     print(f'split:dict:{i}')
+
+        assert(all([not torch.isnan(data_list[i].y)[0] for i in split_dict['train']]))
+        assert(all([not torch.isnan(data_list[i].y)[0] for i in split_dict['valid']]))
+        assert(all([not torch.isnan(data_list[i].y)[0] for i in split_dict['test']]))
+
+        if self.pre_transform is not None:
+            data_list = [self.pre_transform(data) for data in data_list]
+
+        data, slices = self.collate(data_list)
+
+        print('Saving...')
+        torch.save((data, slices), self.processed_paths[0])
+
+    def __getitem__(self, idx):
+        if isinstance(idx, int):
+            item = self.get(self.indices()[idx])
+            item.idx = idx
+            return preprocess_item(item)
+        else:
+            return self.index_select(idx)
+
+    def get_idx_split(self):
+        split_dict = {}
+        split_dict['train'] = [torch.tensor(x) for x in range(0, 80)]
+        split_dict['valid'] = [torch.tensor(x) for x in range(80, 90)]
+        split_dict['test'] = [torch.tensor(x) for x in range(90, 100)]
+        # split_dict = replace_numpy_with_torchtensor(torch.load(osp.join(self.root, 'split_dict.pt')))
+        return split_dict
+
+
+class MyZINCDataset(torch_geometric.datasets.ZINC):
+    def download(self):
+        super(MyZINCDataset, self).download()
+
+    def process(self):
+        super(MyZINCDataset, self).process()
 
     def __getitem__(self, idx):
         if isinstance(idx, int):
@@ -88,12 +322,121 @@ class MyPygPCQM4MDataset(PygPCQM4MDataset):
             return self.index_select(idx)
 
 
-class MyZINCDataset(torch_geometric.datasets.ZINC):
+class MyQSARDataset(InMemoryDataset):
+    def __init__(self,
+                 root,
+                 D=2,
+                 # data = None,
+                 # slices = None,
+                 transform=None,
+                 pre_transform=None,
+                 pre_filter=None,
+                 dataset='435008',
+                 empty=False):
+
+        self.dataset = dataset
+        self.root = root
+        self.D = D
+        super(MyQSARDataset, self).__init__(root, transform, pre_transform, pre_filter)
+        self.transform, self.pre_transform, self.pre_filter = transform, pre_transform, pre_filter
+
+        if not empty:
+            self.data, self.slices = torch.load(self.processed_paths[0])
+
+    # def get(self, idx):
+    #     data = Data()
+    #     for key in self.data.keys:
+    #         item, slices = self.data[key], self.slices[key]
+    #         s = list(repeat(slice(None), item.dim()))
+    #         s[data.__cat_dim__(key, item)] = slice(slices[idx],
+    #                                                 slices[idx + 1])
+    #         data[key] = item[s]
+    #     return data
+
+    @property
+    def raw_file_names(self):
+        file_name_list = os.listdir(self.raw_dir)
+        # assert len(file_name_list) == 1     # currently assume we have a
+        # # single raw file
+        return file_name_list
+
+    @ property
+    def processed_file_names(self):
+        return f'{self.dataset}-{self.D}D.pt'
+
     def download(self):
-        super(MyZINCDataset, self).download()
+        raise NotImplementedError('Must indicate valid location of raw data. '
+                                  'No download allowed')
+
+    # def __getitem__(self, index):
+    #     return self.get(index)
 
     def process(self):
-        super(MyZINCDataset, self).process()
+        data_smiles_list = []
+        data_list = []
+
+        if self.dataset not in ['435008', '1798', '435034']:
+            print(f'dataset:{self.dataset}')
+            raise ValueError('Invalid dataset name')
+
+        for file, label in [(f'{self.dataset}_actives.smi', 1),
+                            (f'{self.dataset}_inactives.smi', 0)]:
+            smiles_path = os.path.join(self.root, 'raw', file)
+            smiles_list = pd.read_csv(
+                smiles_path, sep='\t', header=None)[0]
+
+            # only get first 100 data
+            smiles_list = smiles_list[:100]
+
+            for i in tqdm(range(len(smiles_list)), desc=f'{file}'):
+                # for i in tqdm(range(1)):
+                smi = smiles_list[i]
+
+                # data = smiles2graph(self.D, smi)
+                # if data is None:
+                #     continue
+
+                # if use ogb_smiles2graph()
+                graph = ogb_smiles2graph(smi)
+                data = Data()
+                data.__num_nodes__ = int(graph['num_nodes'])
+                data.edge_index = torch.from_numpy(graph['edge_index']).to(torch.int64)
+                data.edge_attr = torch.from_numpy(graph['edge_feat']).to(torch.int64)
+                data.x = torch.from_numpy(graph['node_feat']).to(torch.int64)
+                # data.y = torch.Tensor([homolumogap])
+
+                data.idx = i
+                data.y = torch.tensor([label])
+                data.smiles = smi
+
+                data_list.append(data)
+                data_smiles_list.append(smiles_list[i])
+
+        if self.pre_filter is not None:
+            data_list = [data for data in data_list if self.pre_filter(data)]
+
+        if self.pre_transform is not None:
+            print('doing pre_transforming...')
+            data_list = [self.pre_transform(data) for data in data_list]
+
+        # write data_smiles_list in processed paths
+        data_smiles_series = pd.Series(data_smiles_list)
+        data_smiles_series.to_csv(os.path.join(
+            self.processed_dir, f'{self.dataset}-smiles.csv'), index=False, header=False)
+
+        print(f'data length:{len(data_list)}')
+        for data in data_list:
+            print(data)
+        data, slices = self.collate(data_list)
+        torch.save((data, slices), self.processed_paths[0])
+
+    def get_idx_split(self):
+        split_dict = {}
+        split_dict['train'] = [torch.tensor(x) for x in range(0, 70)]
+        split_dict['valid'] = [torch.tensor(x) for x in range(80, 90)]
+        split_dict['test'] = [torch.tensor(x) for x in range(90, 100)]
+        # split_dict = replace_numpy_with_torchtensor(torch.load(osp.join(self.root, 'split_dict.pt')))
+        return split_dict
 
     def __getitem__(self, idx):
         if isinstance(idx, int):

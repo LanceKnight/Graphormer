@@ -34,7 +34,10 @@ def cli_main():
     # ------------
     # model
     # ------------
+    print(f'=========================')
+    print(f'checkpoint_path:{args.checkpoint_path}')
     if args.checkpoint_path != '':
+        print(f'option1')
         model = Graphormer.load_from_checkpoint(
             args.checkpoint_path,
             strict=False,
@@ -58,6 +61,7 @@ def cli_main():
             flag_step_size=args.flag_step_size,
         )
     else:
+        print(f'option2')
         model = Graphormer(
             n_layers=args.n_layers,
             num_heads=args.num_heads,
@@ -103,17 +107,21 @@ def cli_main():
     trainer.callbacks.append(LearningRateMonitor(logging_interval='step'))
 
     if args.test:
+        print(f'testing$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$')
         result = trainer.test(model, datamodule=dm)
         pprint(result)
     elif args.validate:
+        print(f'validating$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$')
         result = trainer.validate(model, datamodule=dm)
         pprint(result)
     else:
+        print(f'training$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$')
         trainer.fit(model, datamodule=dm)
 
 
+task = Task.init(project_name="Tests/Graphormer", task_name="running_test", tags="graphormer,debug")
+logger = task.get_logger()
 if __name__ == '__main__':
-    task = Task.init(project_name="Tests", task_name="running_test", tags="graphormer")
-    logger = task.get_logger()
+
     # logger.report_scalar(title='just a test', series='test', value=1, iteration=epoch)
     cli_main()

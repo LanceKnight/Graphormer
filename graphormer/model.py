@@ -110,10 +110,14 @@ class Graphormer(pl.LightningModule):
         self.apply(lambda module: init_params(module, n_layers=n_layers))
 
     def forward(self, batched_data, perturb=None):
+        # print(f'batched_data:{batched_data.idx}')
         attn_bias, spatial_pos, x = batched_data.attn_bias, batched_data.spatial_pos, batched_data.x
         in_degree, out_degree = batched_data.in_degree, batched_data.in_degree
         edge_input, attn_edge_type = batched_data.edge_input, batched_data.attn_edge_type
         # graph_attn_bias
+
+        # print(f'attn_bias:{attn_bias.shape}\n{attn_bias}')
+        # print(f'x:{x.shape}\n{x}')
         n_graph, n_node = x.size()[:2]
         graph_attn_bias = attn_bias.clone()
         graph_attn_bias = graph_attn_bias.unsqueeze(1).repeat(
@@ -187,6 +191,7 @@ class Graphormer(pl.LightningModule):
         return output
 
     def training_step(self, batched_data, batch_idx):
+        print(f'training running')
         if self.dataset_name == 'ogbg-molpcba':
             if not self.flag:
                 y_hat = self(batched_data).view(-1)
@@ -229,10 +234,12 @@ class Graphormer(pl.LightningModule):
             y_hat = self(batched_data).view(-1)
             y_gt = batched_data.y.view(-1)
             loss = self.loss_fn(y_hat, y_gt)
-        self.log('train_loss', loss, sync_dist=True)
+        # self.log('train_loss', loss, sync_dist=True)
+
         return loss
 
     def validation_step(self, batched_data, batch_idx):
+        print(f'validation step running')
         if self.dataset_name in ['PCQM4M-LSC', 'ZINC']:
             y_pred = self(batched_data).view(-1)
             y_true = batched_data.y.view(-1)
@@ -245,6 +252,7 @@ class Graphormer(pl.LightningModule):
         }
 
     def validation_epoch_end(self, outputs):
+        print(f'validation step finishing 123self.metric:{self.metric}')
         y_pred = torch.cat([i['y_pred'] for i in outputs])
         y_true = torch.cat([i['y_true'] for i in outputs])
         if self.dataset_name == 'ogbg-molpcba':
@@ -254,6 +262,7 @@ class Graphormer(pl.LightningModule):
         else:
             input_dict = {"y_true": y_true, "y_pred": y_pred}
             try:
+                print(f'valid_{self.metric}  self.self.evaluator.eval(input_dict){self.evaluator.eval(input_dict)[self.metric]}')
                 self.log('valid_' + self.metric, self.evaluator.eval(input_dict)
                          [self.metric], sync_dist=True)
             except:

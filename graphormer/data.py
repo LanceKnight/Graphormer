@@ -65,14 +65,14 @@ def get_dataset(dataset_name='abaaba'):
             'test_dataset': MyZINCDataset(subset=True, root='../../dataset/pyg_zinc', split='test'),
             'max_node': 128,
         }
-    elif dataset_name == 'qsar':
+    elif dataset_name in ['435008', '1798', '435034']:
         dataset = {
             'num_class': 1,
             'loss_fn': F.l1_loss,
             'metric': 'mae',
             'metric_mode': 'min',
             'evaluator': ogb.lsc.PCQM4MEvaluator(),  # same objective function, so reuse it
-            'dataset': MyQSARDataset(root='../../dataset/qsar'),
+            'dataset': MyQSARDataset(root='../../dataset/qsar', dataset=dataset_name),
             'max_node': 128,
         }
 
@@ -119,8 +119,11 @@ class GraphDataModule(LightningDataModule):
         else:
             split_idx = self.dataset['dataset'].get_idx_split()
             self.dataset_train = self.dataset['dataset'][split_idx["train"]]
+            print(f'training len:{len(self.dataset_train)})')
             self.dataset_val = self.dataset['dataset'][split_idx["valid"]]
+            print(f'validation len:{len(self.dataset_val)})')
             self.dataset_test = self.dataset['dataset'][split_idx["test"]]
+            print(f'training len:{len(self.dataset_test)})')
 
     def train_dataloader(self):
         loader = DataLoader(
