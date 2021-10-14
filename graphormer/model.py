@@ -191,7 +191,7 @@ class Graphormer(pl.LightningModule):
         return output
 
     def training_step(self, batched_data, batch_idx):
-        print(f'training running')
+        print(f'\ntraining running')
         if self.dataset_name == 'ogbg-molpcba':
             if not self.flag:
                 y_hat = self(batched_data).view(-1)
@@ -239,7 +239,7 @@ class Graphormer(pl.LightningModule):
         return loss
 
     def validation_step(self, batched_data, batch_idx):
-        print(f'validation step running')
+        print(f'\nvalidation step running')
         if self.dataset_name in ['PCQM4M-LSC', 'ZINC']:
             y_pred = self(batched_data).view(-1)
             y_true = batched_data.y.view(-1)
@@ -252,7 +252,7 @@ class Graphormer(pl.LightningModule):
         }
 
     def validation_epoch_end(self, outputs):
-        print(f'validation step finishing 123self.metric:{self.metric}')
+        print(f'\nvalidation step finishing 123self.metric:{self.metric}')
         y_pred = torch.cat([i['y_pred'] for i in outputs])
         y_true = torch.cat([i['y_true'] for i in outputs])
         if self.dataset_name == 'ogbg-molpcba':

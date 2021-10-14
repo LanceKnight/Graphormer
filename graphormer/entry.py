@@ -22,6 +22,7 @@ def cli_main():
     parser = GraphDataModule.add_argparse_args(parser)
     args = parser.parse_args()
     args.max_steps = args.tot_updates + 1
+    print(f'args.max_steps:{args.max_steps}')
     if not args.test and not args.validate:
         print(args)
     pl.seed_everything(args.seed)
@@ -119,7 +120,7 @@ def cli_main():
         trainer.fit(model, datamodule=dm)
 
 
-task = Task.init(project_name="Tests/Graphormer", task_name="running_test", tags="graphormer,debug")
+task = Task.init(project_name="Tests/Graphormer", task_name="AUC test", tags=["graphormer", "debug", "AUC"])
 logger = task.get_logger()
 if __name__ == '__main__':
 

@@ -240,6 +240,10 @@ class MyPygPCQM4MDataset(PygPCQM4MDataset):
     def download(self):
         super(MyPygPCQM4MDataset, self).download()
 
+    @ property
+    def processed_file_names(self):
+        return f'{self.dataset}-{self.D}D.pt'
+
     def process(self):
         # super(MyPygPCQM4MDataset, self).process()
         data_df = pd.read_csv(osp.join(self.raw_dir, 'data.csv.gz')).head(100)
