@@ -390,7 +390,7 @@ class MyQSARDataset(InMemoryDataset):
                 smiles_path, sep='\t', header=None)[0]
 
             # only get first 100 data
-            smiles_list = smiles_list[:100]
+            smiles_list = smiles_list
 
             for i in tqdm(range(len(smiles_list)), desc=f'{file}'):
                 # for i in tqdm(range(1)):
@@ -401,7 +401,12 @@ class MyQSARDataset(InMemoryDataset):
                 #     continue
 
                 # if use ogb_smiles2graph()
-                graph = ogb_smiles2graph(smi)
+                try:
+                    graph = ogb_smiles2graph(smi)
+                except:
+                    print('cannot convert smiles to graph')
+                    pass
+
                 data = Data()
                 data.__num_nodes__ = int(graph['num_nodes'])
                 data.edge_index = torch.from_numpy(graph['edge_index']).to(torch.int64)
@@ -436,9 +441,10 @@ class MyQSARDataset(InMemoryDataset):
 
     def get_idx_split(self):
         split_dict = {}
-        split_dict['train'] = [torch.tensor(x) for x in range(0, 70)]
-        split_dict['valid'] = [torch.tensor(x) for x in range(80, 90)]
-        split_dict['test'] = [torch.tensor(x) for x in range(90, 100)]
+        # total 448 actives. split: train-358, 45, 45
+        split_dict['train'] = [torch.tensor(x) for x in range(0, 358)] + [torch.tensor(x) for x in range(1000, 1442)] # 800 training
+        split_dict['valid'] = [torch.tensor(x) for x in range(358, 403)] + [torch.tensor(x) for x in range(2000, 2155)] # 200 valid
+        split_dict['test'] = [torch.tensor(x) for x in range(403, 448 )]+ [torch.tensor(x) for x in range(3000, 3155)] # 200 test
         # split_dict = replace_numpy_with_torchtensor(torch.load(osp.join(self.root, 'split_dict.pt')))
         return split_dict
 

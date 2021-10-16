@@ -7,9 +7,10 @@ import torch
 import math
 import torch.nn as nn
 import pytorch_lightning as pl
+from evaluation import calculate_logAUC
 
 from utils.flag import flag_bounded
-
+from typing import List, Dict
 
 def init_params(module, n_layers):
     if isinstance(module, nn.Linear):
@@ -108,6 +109,8 @@ class Graphormer(pl.LightningModule):
         self.hidden_dim = hidden_dim
         self.automatic_optimization = not self.flag
         self.apply(lambda module: init_params(module, n_layers=n_layers))
+
+
 
     def forward(self, batched_data, perturb=None):
         # print(f'batched_data:{batched_data.idx}')
@@ -234,9 +237,17 @@ class Graphormer(pl.LightningModule):
             y_hat = self(batched_data).view(-1)
             y_gt = batched_data.y.view(-1)
             loss = self.loss_fn(y_hat, y_gt)
-        # self.log('train_loss', loss, sync_dist=True)
+        # self.log('train_loss', loss)
 
-        return loss
+        return {"loss":loss, "logAUC":loss+1}
+
+    def training_epoch_end(self, outputs: List[Dict]) -> None:
+        epoch_outputs = {}
+        for key in outputs[0].keys():
+            mean_output = sum(output[key] for output in outputs)/len(outputs)
+            epoch_outputs[key] = mean_output
+        # print(f'output:{epoch_outputs}')
+        self.train_epoch_outputs = epoch_outputs
 
     def validation_step(self, batched_data, batch_idx):
         print(f'\nvalidation step running')
@@ -251,8 +262,12 @@ class Graphormer(pl.LightningModule):
             'y_true': y_true,
         }
 
+
+        # return {"logAUC":15}
+
     def validation_epoch_end(self, outputs):
         print(f'\nvalidation step finishing 123self.metric:{self.metric}')
+        print(f'model output:{outputs}')
         y_pred = torch.cat([i['y_pred'] for i in outputs])
         y_true = torch.cat([i['y_true'] for i in outputs])
         if self.dataset_name == 'ogbg-molpcba':
@@ -262,11 +277,30 @@ class Graphormer(pl.LightningModule):
         else:
             input_dict = {"y_true": y_true, "y_pred": y_pred}
             try:
-                print(f'valid_{self.metric}  self.self.evaluator.eval(input_dict){self.evaluator.eval(input_dict)[self.metric]}')
+                # print(f'evaluator:{self.evaluator.eval(input_dict)}')
+                # print(f'valid_{self.metric}  self.self.evaluator.eval(input_dict){self.evaluator.eval(input_dict)[self.metric]}')
                 self.log('valid_' + self.metric, self.evaluator.eval(input_dict)
                          [self.metric], sync_dist=True)
+
             except:
                 pass
+
+
+            print(f'input_dict:{input_dict["y_true"]}')
+            # input_dict['y_true'][0] = 0
+            print(f'type ture:{type(input_dict["y_true"][0].numpy())}, type pred:{input_dict["y_pred"][0].dtype})')
+
+            accumulate_logAUC = 0
+            num_samples = len(input_dict['y_true'])
+            # for i in range(num_samples):
+            #     print(f'y_true {i} {input_dict["y_true"][i].numpy()}')
+            logAUC = calculate_logAUC(input_dict['y_true'].numpy(), input_dict['y_pred'].numpy(), FPR_range=(0.001, 0.1))
+            #     accumulate_logAUC += logAUC
+            # logAUC = accumulate_logAUC / num_samples
+            print(f'logAUC:{logAUC}')
+            self.valid_epoch_outputs = {"logAUC": logAUC}  # self.evaluator.eval(input_dict)
+
+
 
     def test_step(self, batched_data, batch_idx):
         if self.dataset_name in ['PCQM4M-LSC', 'ZINC']:

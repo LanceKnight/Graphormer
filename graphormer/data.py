@@ -69,11 +69,12 @@ def get_dataset(dataset_name='abaaba'):
         dataset = {
             'num_class': 1,
             'loss_fn': F.l1_loss,
-            'metric': 'mae',
+            'metric': 'LogAUC',
             'metric_mode': 'min',
             'evaluator': ogb.lsc.PCQM4MEvaluator(),  # same objective function, so reuse it
             'dataset': MyQSARDataset(root='../../dataset/qsar', dataset=dataset_name),
-            'max_node': 128,
+            'num_samples': len(MyQSARDataset(root='../../dataset/qsar', dataset=dataset_name)),
+            'max_node':512
         }
 
     else:

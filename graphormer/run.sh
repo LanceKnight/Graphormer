@@ -23,4 +23,4 @@ python entry.py --num_workers 8 --seed $seed --batch_size $batch_size \
       --dataset_name $dataset \
       --gpus $n_gpu --accelerator ddp --precision 16 --gradient_clip_val 5.0 \
       $arch \
-      --default_root_dir $default_root_dir --warmup_updates 2 --tot_updates 10 --n_layers 2 
+      --default_root_dir $default_root_dir --warmup_updates 200 --tot_updates 500 --n_layers 2 --max_steps 70

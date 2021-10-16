@@ -8,11 +8,12 @@ from argparse import ArgumentParser
 from pprint import pprint
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
+from monitors import LogAUCMonitor, LossMonitor
 import os
 from clearml import Task
 
 
-def cli_main():
+def cli_main(logger):
     # ------------
     # args
     # ------------
@@ -22,7 +23,7 @@ def cli_main():
     parser = GraphDataModule.add_argparse_args(parser)
     args = parser.parse_args()
     args.max_steps = args.tot_updates + 1
-    print(f'args.max_steps:{args.max_steps}')
+    # print(f'args.max_steps:{args.max_steps}')
     if not args.test and not args.validate:
         print(args)
     pl.seed_everything(args.seed)
@@ -103,9 +104,15 @@ def cli_main():
     if not args.test and not args.validate and os.path.exists(dirpath + '/last.ckpt'):
         args.resume_from_checkpoint = dirpath + '/last.ckpt'
         print('args.resume_from_checkpoint', args.resume_from_checkpoint)
+
     trainer = pl.Trainer.from_argparse_args(args)
     trainer.callbacks.append(checkpoint_callback)
+    trainer.callbacks.append(LossMonitor(stage='train', logger=logger, logging_interval='step'))
+    trainer.callbacks.append(LossMonitor(stage='train', logger=logger, logging_interval='epoch'))
+    trainer.callbacks.append(LogAUCMonitor(stage='valid',logger=logger, logging_interval='epoch'))
+    # trainer.callbacks.append(LogAUCMonitor(stage='train', logger=logger, logging_interval='step'))
     trainer.callbacks.append(LearningRateMonitor(logging_interval='step'))
+
 
     if args.test:
         print(f'testing$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$')
@@ -120,9 +127,9 @@ def cli_main():
         trainer.fit(model, datamodule=dm)
 
 
-task = Task.init(project_name="Tests/Graphormer", task_name="AUC test", tags=["graphormer", "debug", "AUC"])
-logger = task.get_logger()
-if __name__ == '__main__':
+task = Task.init(project_name="Tests/Graphormer", task_name="AUC test", tags=["graphormer", "debug", "qsar"])
 
+if __name__ == '__main__':
+    logger = task.get_logger()
     # logger.report_scalar(title='just a test', series='test', value=1, iteration=epoch)
-    cli_main()
+    cli_main(logger)
