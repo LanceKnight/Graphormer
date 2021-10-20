@@ -7,6 +7,7 @@ from wrapper import MyGraphPropPredDataset, MyPygPCQM4MDataset, MyZINCDataset, M
 from pytorch_lightning import LightningDataModule
 import torch
 from torch.nn import functional as F
+from torch.nn import BCEWithLogitsLoss
 from torch.utils.data import DataLoader
 import ogb
 import ogb.lsc
@@ -56,7 +57,7 @@ def get_dataset(dataset_name='abaaba'):
     elif dataset_name == 'ZINC':
         dataset = {
             'num_class': 1,
-            'loss_fn': F.l1_loss,
+            'loss_fn': BCEWithLogitsLoss,
             'metric': 'mae',
             'metric_mode': 'min',
             'evaluator': ogb.lsc.PCQM4MEvaluator(),  # same objective function, so reuse it
@@ -137,6 +138,9 @@ class GraphDataModule(LightningDataModule):
                                'max_node'], multi_hop_max_dist=self.multi_hop_max_dist, spatial_pos_max=self.spatial_pos_max),
         )
         print('len(train_dataloader)', len(loader))
+        counter = 0
+        for batch in loader:
+            print(batch.y)
         return loader
 
     def val_dataloader(self):
@@ -150,6 +154,8 @@ class GraphDataModule(LightningDataModule):
                                'max_node'], multi_hop_max_dist=self.multi_hop_max_dist, spatial_pos_max=self.spatial_pos_max),
         )
         print('len(val_dataloader)', len(loader))
+        for batch in loader:
+            print(batch.y)
         return loader
 
     def test_dataloader(self):
@@ -163,4 +169,6 @@ class GraphDataModule(LightningDataModule):
                                'max_node'], multi_hop_max_dist=self.multi_hop_max_dist, spatial_pos_max=self.spatial_pos_max),
         )
         print('len(test_dataloader)', len(loader))
+        for batch in loader:
+            print(batch.y)
         return loader

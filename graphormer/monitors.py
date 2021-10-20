@@ -3,7 +3,7 @@ from pytorch_lightning.utilities.exceptions import MisconfigurationException
 
 
 class MetricMonitor(Callback):
-    def __init__(self, stage='train', metric=None, logger=None, logging_interval=None, log_momentum: bool = False):
+    def __init__(self, stage='train', metric=None, logger=None, logging_interval=None):
 
         if logging_interval not in (None, "step", "epoch"):
             raise MisconfigurationException("MetricMonitor: logging_interval should be `step` or `epoch` or `None`.")
@@ -46,10 +46,15 @@ class MetricMonitor(Callback):
 
 
 class LogAUCMonitor(MetricMonitor):
-    def __init__(self, stage = 'train', logger=None, logging_interval=None, log_momentum: bool = False):
-        super(LogAUCMonitor, self).__init__(stage = stage, metric="logAUC", logger=logger, logging_interval=logging_interval, log_momentum=log_momentum)
+    def __init__(self, stage = 'valid', logger=None, logging_interval=None, log_momentum: bool = False):
+        super(LogAUCMonitor, self).__init__(stage=stage, metric="logAUC", logger=logger, logging_interval=logging_interval)
 
 
 class LossMonitor(MetricMonitor):
     def __init__(self, stage = 'train', logger=None, logging_interval=None, log_momentum: bool = False):
-        super(LossMonitor, self).__init__(stage = stage, metric="loss", logger=logger, logging_interval=logging_interval, log_momentum=log_momentum)
+        super(LossMonitor, self).__init__(stage=stage, metric="loss", logger=logger, logging_interval=logging_interval)
+
+
+class PPVMonitor(MetricMonitor):
+    def __init__(self, stage = 'valid', logger=None, logging_interval=None, log_momentum: bool = False):
+        super(PPVMonitor, self).__init__(stage=stage, metric="ppv", logger=logger, logging_interval=logging_interval)

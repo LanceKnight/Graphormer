@@ -3,12 +3,12 @@
 
 from model import Graphormer
 from data import GraphDataModule, get_dataset
+from monitors import LogAUCMonitor, LossMonitor, PPVMonitor
 
 from argparse import ArgumentParser
 from pprint import pprint
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
-from monitors import LogAUCMonitor, LossMonitor
 import os
 from clearml import Task
 
@@ -109,7 +109,10 @@ def cli_main(logger):
     trainer.callbacks.append(checkpoint_callback)
     trainer.callbacks.append(LossMonitor(stage='train', logger=logger, logging_interval='step'))
     trainer.callbacks.append(LossMonitor(stage='train', logger=logger, logging_interval='epoch'))
+    trainer.callbacks.append(LogAUCMonitor(stage='train', logger=logger, logging_interval='epoch'))
+    trainer.callbacks.append(PPVMonitor(stage='train', logger=logger, logging_interval='epoch'))
     trainer.callbacks.append(LogAUCMonitor(stage='valid',logger=logger, logging_interval='epoch'))
+    trainer.callbacks.append(PPVMonitor(stage='valid',logger=logger, logging_interval='epoch'))
     # trainer.callbacks.append(LogAUCMonitor(stage='train', logger=logger, logging_interval='step'))
     trainer.callbacks.append(LearningRateMonitor(logging_interval='step'))
 

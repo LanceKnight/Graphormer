@@ -7,10 +7,13 @@ import torch
 import math
 import torch.nn as nn
 import pytorch_lightning as pl
-from evaluation import calculate_logAUC
+from evaluation import calculate_logAUC, calculate_ppv
 
 from utils.flag import flag_bounded
 from typing import List, Dict
+
+logAUC_range=(0.001, 0.1)
+
 
 def init_params(module, n_layers):
     if isinstance(module, nn.Linear):
@@ -236,17 +239,34 @@ class Graphormer(pl.LightningModule):
         else:
             y_hat = self(batched_data).view(-1)
             y_gt = batched_data.y.view(-1)
+            y_pred = self(batched_data).detach()
+            y_true = batched_data.y
             loss = self.loss_fn(y_hat, y_gt)
         # self.log('train_loss', loss)
 
-        return {"loss":loss, "logAUC":loss+1}
+        logAUC = calculate_logAUC(y_true.cpu().numpy(), y_pred.cpu().numpy(), FPR_range=logAUC_range)
+        return {"loss":loss, "logAUC":logAUC, "y_pred":y_pred, "y_true":y_true}
 
     def training_epoch_end(self, outputs: List[Dict]) -> None:
         epoch_outputs = {}
+        y_pred = []
+        y_true = []
+        print(f'len output:{len(outputs)}')
         for key in outputs[0].keys():
-            mean_output = sum(output[key] for output in outputs)/len(outputs)
-            epoch_outputs[key] = mean_output
-        # print(f'output:{epoch_outputs}')
+            if (key !='y_pred') and (key !='y_true'):
+                mean_output = sum(output[key] for output in outputs)/len(outputs)
+                epoch_outputs[key] = mean_output
+
+        y_pred = torch.cat([i['y_pred'] for i in outputs])
+        y_true = torch.cat([i['y_true'] for i in outputs])
+        input_dict = {"y_true": y_true, "y_pred": y_pred}
+
+        # print(f'end: y_pred:{y_pred}, y_true:{y_true}')
+        logAUC = calculate_logAUC(input_dict['y_true'].cpu().numpy(), input_dict['y_pred'].cpu().numpy(), FPR_range=logAUC_range)
+        ppv = calculate_ppv(input_dict['y_true'].cpu().numpy(), input_dict['y_pred'].cpu().numpy())
+
+        epoch_outputs['logAUC'] = logAUC
+        epoch_outputs['ppv'] = ppv
         self.train_epoch_outputs = epoch_outputs
 
     def validation_step(self, batched_data, batch_idx):
@@ -257,6 +277,7 @@ class Graphormer(pl.LightningModule):
         else:
             y_pred = self(batched_data)
             y_true = batched_data.y
+            print(f'batched_data.y')
         return {
             'y_pred': y_pred,
             'y_true': y_true,
@@ -267,7 +288,7 @@ class Graphormer(pl.LightningModule):
 
     def validation_epoch_end(self, outputs):
         print(f'\nvalidation step finishing 123self.metric:{self.metric}')
-        print(f'model output:{outputs}')
+        # print(f'model output:{outputs}')
         y_pred = torch.cat([i['y_pred'] for i in outputs])
         y_true = torch.cat([i['y_true'] for i in outputs])
         if self.dataset_name == 'ogbg-molpcba':
@@ -286,19 +307,19 @@ class Graphormer(pl.LightningModule):
                 pass
 
 
-            print(f'input_dict:{input_dict["y_true"]}')
+            # print(f'input_dict:{input_dict["y_true"]}')
             # input_dict['y_true'][0] = 0
-            print(f'type ture:{type(input_dict["y_true"][0].numpy())}, type pred:{input_dict["y_pred"][0].dtype})')
+            print(f'y-true:\n{input_dict["y_true"].cpu().numpy()}\ny-pred:\n{input_dict["y_pred"]})')
 
             accumulate_logAUC = 0
-            num_samples = len(input_dict['y_true'])
-            # for i in range(num_samples):
-            #     print(f'y_true {i} {input_dict["y_true"][i].numpy()}')
-            logAUC = calculate_logAUC(input_dict['y_true'].numpy(), input_dict['y_pred'].numpy(), FPR_range=(0.001, 0.1))
+            # num_samples = len(input_dict['y_true'])
+
+            logAUC = calculate_logAUC(input_dict['y_true'].cpu().numpy(), input_dict['y_pred'].cpu().numpy(), FPR_range=logAUC_range)
+            ppv = calculate_ppv(input_dict['y_true'].cpu().numpy(), input_dict['y_pred'].cpu().numpy())
             #     accumulate_logAUC += logAUC
             # logAUC = accumulate_logAUC / num_samples
-            print(f'logAUC:{logAUC}')
-            self.valid_epoch_outputs = {"logAUC": logAUC}  # self.evaluator.eval(input_dict)
+            # print(f'logAUC:{logAUC} ppv:{ppv}')
+            self.valid_epoch_outputs = {"logAUC": logAUC, "ppv":ppv}  # self.evaluator.eval(input_dict)
 
 
 
