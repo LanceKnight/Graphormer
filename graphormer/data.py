@@ -57,7 +57,7 @@ def get_dataset(dataset_name='abaaba'):
     elif dataset_name == 'ZINC':
         dataset = {
             'num_class': 1,
-            'loss_fn': BCEWithLogitsLoss,
+            'loss_fn': F.l1_loss,
             'metric': 'mae',
             'metric_mode': 'min',
             'evaluator': ogb.lsc.PCQM4MEvaluator(),  # same objective function, so reuse it
@@ -69,7 +69,7 @@ def get_dataset(dataset_name='abaaba'):
     elif dataset_name in ['435008', '1798', '435034']:
         dataset = {
             'num_class': 1,
-            'loss_fn': F.l1_loss,
+            'loss_fn': BCEWithLogitsLoss(),
             'metric': 'LogAUC',
             'metric_mode': 'min',
             'evaluator': ogb.lsc.PCQM4MEvaluator(),  # same objective function, so reuse it

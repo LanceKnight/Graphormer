@@ -241,7 +241,8 @@ class Graphormer(pl.LightningModule):
             y_gt = batched_data.y.view(-1)
             y_pred = self(batched_data).detach()
             y_true = batched_data.y
-            loss = self.loss_fn(y_hat, y_gt)
+            print(f'y_hat:{y_hat} y_gt:{y_gt}')
+            loss = self.loss_fn(y_hat, y_gt.float())
         # self.log('train_loss', loss)
 
         logAUC = calculate_logAUC(y_true.cpu().numpy(), y_pred.cpu().numpy(), FPR_range=logAUC_range)
@@ -309,7 +310,7 @@ class Graphormer(pl.LightningModule):
 
             # print(f'input_dict:{input_dict["y_true"]}')
             # input_dict['y_true'][0] = 0
-            print(f'y-true:\n{input_dict["y_true"].cpu().numpy()}\ny-pred:\n{input_dict["y_pred"]})')
+            print(f'valid epoch end y-true:\n{input_dict["y_true"].cpu().numpy()}\ny-pred:\n{input_dict["y_pred"]})')
 
             accumulate_logAUC = 0
             # num_samples = len(input_dict['y_true'])

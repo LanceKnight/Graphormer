@@ -415,7 +415,7 @@ class MyQSARDataset(InMemoryDataset):
                 # data.y = torch.Tensor([homolumogap])
 
                 data.idx = i
-                data.y = torch.tensor([label])
+                data.y = torch.tensor([label], dtype = torch.float32)
                 data.smiles = smi
 
                 data_list.append(data)
