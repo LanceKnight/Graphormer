@@ -278,7 +278,7 @@ class Graphormer(pl.LightningModule):
         else:
             y_pred = self(batched_data)
             y_true = batched_data.y
-            print(f'batched_data.y')
+            # print(f'batched_data.y')
         return {
             'y_pred': y_pred,
             'y_true': y_true,

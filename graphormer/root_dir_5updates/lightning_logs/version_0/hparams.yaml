@@ -16,4 +16,4 @@ num_heads: 32
 peak_lr: 0.0002
 tot_updates: 10000
 warmup_updates: 600
-weight_decay: 0.01
+weight_decay: 10.0

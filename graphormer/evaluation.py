@@ -46,7 +46,7 @@ def calculate_ppv(y_true, y_pred):
     '''
     y_pred = sigmoid(y_pred)
     y_pred = np.where(y_pred > 0.5, 1, 0)
-    print(f'\nppv y_true:\n{y_true}\n y_pred:\n{y_pred}')
+    # print(f'\nppv y_true:\n{y_true}\n y_pred:\n{y_pred}')
     # print(f'result:{confusion_matrix(y_true, y_pred, labels = [0,1])}')
     tn, fp, fn, tp = confusion_matrix(y_true, y_pred, labels=[0,1]).ravel()
     print(f'\ntn:{tn}, fp:{fp}, fn:{fn}, tp:{tp}, tp+fp:{tp+fp}')

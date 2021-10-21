@@ -8,7 +8,7 @@ from pytorch_lightning import LightningDataModule
 import torch
 from torch.nn import functional as F
 from torch.nn import BCEWithLogitsLoss
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 import ogb
 import ogb.lsc
 import ogb.graphproppred
@@ -128,10 +128,20 @@ class GraphDataModule(LightningDataModule):
             print(f'training len:{len(self.dataset_test)})')
 
     def train_dataloader(self):
+        num_train_active = len(torch.nonzero(torch.tensor([data.y for data in self.dataset_train])))
+        num_train_inactive = len(self.dataset_train) - num_train_active
+        print(f'training size: {len(self.dataset_train)}, actives: {num_train_active}')
+
+        train_sampler_weight = torch.tensor([(1. / num_train_inactive) if data.y == 0 else (1. / num_train_active) for data in self.dataset_train])
+
+        train_sampler = WeightedRandomSampler(train_sampler_weight, len(train_sampler_weight))
+
+
         loader = DataLoader(
             self.dataset_train,
             batch_size=self.batch_size,
-            shuffle=True,
+            # shuffle=True,
+            sampler= train_sampler,
             num_workers=self.num_workers,
             pin_memory=True,
             collate_fn=partial(collator, max_node=get_dataset(self.dataset_name)[

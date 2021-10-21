@@ -442,10 +442,10 @@ class MyQSARDataset(InMemoryDataset):
     def get_idx_split(self):
         split_dict = {}
         # total 362 actives. split: train-290, 36, 36
-        split_dict['train'] = [torch.tensor(x) for x in range(0, 290)] + [torch.tensor(x) for x in range(1000, 1510)] # 800 training
+        split_dict['train'] = [torch.tensor(x) for x in range(0, 50)] + [torch.tensor(x) for x in range(1000, 9425)] #  training
         # split_dict['valid'] = [torch.tensor(x) for x in range(0, 290)] + [torch.tensor(x) for x in range(1000, 1510)] # 800 training
-        split_dict['valid'] = [torch.tensor(x) for x in range(290, 326)] + [torch.tensor(x) for x in range(2000, 2064)] # 100 valid
-        split_dict['test'] = [torch.tensor(x) for x in range(326, 362 )]+ [torch.tensor(x) for x in range(3000, 3064)] # 100 test
+        split_dict['valid'] = [torch.tensor(x) for x in range(50, 100)] + [torch.tensor(x) for x in range(10000, 18425)] # 100 valid
+        split_dict['test'] = [torch.tensor(x) for x in range(326, 362 )]+ [torch.tensor(x) for x in range(3000, 9066)] # 100 test
         # split_dict = replace_numpy_with_torchtensor(torch.load(osp.join(self.root, 'split_dict.pt')))
         return split_dict
 
