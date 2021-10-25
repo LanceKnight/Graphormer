@@ -18,7 +18,7 @@ from rdkit.Chem.rdMolDescriptors import GetMorganFingerprintAsBitVect
 from ogb.utils import smiles2graph as ogb_smiles2graph
 
 pyximport.install(setup_args={'include_dirs': np.get_include()})
-import algos
+# import algos
 
 pattern_dict = {'[NH-]': '[N-]'}
 
