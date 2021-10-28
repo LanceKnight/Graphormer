@@ -8,11 +8,11 @@ import math
 import torch.nn as nn
 import pytorch_lightning as pl
 from evaluation import calculate_logAUC, calculate_ppv
-from pytorch_metric_learning.losses import NTXentLoss
+
 from utils.flag import flag_bounded
 from typing import List, Dict
 
-logAUC_range = (0.001, 0.1)
+logAUC_range=(0.001, 0.1)
 
 
 def init_params(module, n_layers):
@@ -22,7 +22,6 @@ def init_params(module, n_layers):
             module.bias.data.zero_()
     if isinstance(module, nn.Embedding):
         module.weight.data.normal_(mean=0.0, std=0.02)
-
 
 
 class Graphormer(pl.LightningModule):
@@ -113,6 +112,8 @@ class Graphormer(pl.LightningModule):
         self.hidden_dim = hidden_dim
         self.automatic_optimization = not self.flag
         self.apply(lambda module: init_params(module, n_layers=n_layers))
+
+
 
     def forward(self, batched_data, perturb=None):
         # print(f'batched_data:{batched_data.idx}')
@@ -246,7 +247,7 @@ class Graphormer(pl.LightningModule):
         # self.log('train_loss', loss)
 
         logAUC = calculate_logAUC(y_true.cpu().numpy(), y_pred.cpu().numpy(), FPR_range=logAUC_range)
-        return {"loss": loss, "logAUC": logAUC, "y_pred": y_pred, "y_true": y_true}
+        return {"loss":loss, "logAUC":logAUC, "y_pred":y_pred, "y_true":y_true}
 
     def training_epoch_end(self, outputs: List[Dict]) -> None:
         epoch_outputs = {}
@@ -254,8 +255,8 @@ class Graphormer(pl.LightningModule):
         y_true = []
         print(f'len output:{len(outputs)}')
         for key in outputs[0].keys():
-            if (key != 'y_pred') and (key != 'y_true'):
-                mean_output = sum(output[key] for output in outputs) / len(outputs)
+            if (key !='y_pred') and (key !='y_true'):
+                mean_output = sum(output[key] for output in outputs)/len(outputs)
                 epoch_outputs[key] = mean_output
 
         y_pred = torch.cat([i['y_pred'] for i in outputs])
@@ -284,6 +285,7 @@ class Graphormer(pl.LightningModule):
             'y_true': y_true,
         }
 
+
         # return {"logAUC":15}
 
     def validation_epoch_end(self, outputs):
@@ -306,6 +308,7 @@ class Graphormer(pl.LightningModule):
             except:
                 pass
 
+
             # print(f'input_dict:{input_dict["y_true"]}')
             # input_dict['y_true'][0] = 0
             print(f'valid epoch end y-true:\n{input_dict["y_true"].cpu().numpy()}\ny-pred:\n{input_dict["y_pred"]})')
@@ -318,7 +321,9 @@ class Graphormer(pl.LightningModule):
             #     accumulate_logAUC += logAUC
             # logAUC = accumulate_logAUC / num_samples
             # print(f'logAUC:{logAUC} ppv:{ppv}')
-            self.valid_epoch_outputs = {"logAUC": logAUC, "ppv": ppv}  # self.evaluator.eval(input_dict)
+            self.valid_epoch_outputs = {"logAUC": logAUC, "ppv":ppv}  # self.evaluator.eval(input_dict)
+
+
 
     def test_step(self, batched_data, batch_idx):
         if self.dataset_name in ['PCQM4M-LSC', 'ZINC']:
@@ -389,103 +394,6 @@ class Graphormer(pl.LightningModule):
         parser.add_argument('--flag_step_size', type=float, default=1e-3)
         parser.add_argument('--flag_mag', type=float, default=1e-3)
         return parent_parser
-
-class SelfSupervisedGraphormer(Graphormer):
-    def __init__(
-        self,
-        n_layers,
-        num_heads,
-        hidden_dim,
-        dropout_rate,
-        intput_dropout_rate,
-        weight_decay,
-        ffn_dim,
-        dataset_name,
-        warmup_updates,
-        tot_updates,
-        peak_lr,
-        end_lr,
-        edge_type,
-        multi_hop_max_dist,
-        attention_dropout_rate,
-        flag=False,
-        flag_m=3,
-        flag_step_size=1e-3,
-        flag_mag=1e-3,
-    ):
-        super(SelfSupervisedGraphormer, self).__init__(
-            n_layers,
-            num_heads,
-            hidden_dim,
-            dropout_rate,
-            intput_dropout_rate,
-            weight_decay,
-            ffn_dim,
-            dataset_name,
-            warmup_updates,
-            tot_updates,
-            peak_lr,
-            end_lr,
-            edge_type,
-            multi_hop_max_dist,
-            attention_dropout_rate,
-            flag,
-            flag_m,
-            flag_step_size,
-            flag_mag)
-
-    def training_step(self, batched_data, batch_idx):
-        print(f'\ntraining running')
-        if self.dataset_name == 'ogbg-molpcba':
-            if not self.flag:
-                y_hat = self(batched_data).view(-1)
-                y_gt = batched_data.y.view(-1).float()
-                mask = ~torch.isnan(y_gt)
-                loss = self.loss_fn(y_hat[mask], y_gt[mask])
-            else:
-                y_gt = batched_data.y.view(-1).float()
-                mask = ~torch.isnan(y_gt)
-
-                def forward(perturb): return self(batched_data, perturb)
-                model_forward = (self, forward)
-                n_graph, n_node = batched_data.x.size()[:2]
-                perturb_shape = (n_graph, n_node, self.hidden_dim)
-
-                optimizer = self.optimizers()
-                optimizer.zero_grad()
-                loss, _ = flag_bounded(model_forward, perturb_shape, y_gt[mask], optimizer, batched_data.x.device, self.loss_fn,
-                                       m=self.flag_m, step_size=self.flag_step_size, mag=self.flag_mag, mask=mask)
-                self.lr_schedulers().step()
-        elif self.dataset_name == 'ogbg-molhiv':
-            if not self.flag:
-                y_hat = self(batched_data).view(-1)
-                y_gt = batched_data.y.view(-1).float()
-                loss = self.loss_fn(y_hat, y_gt)
-            else:
-                y_gt = batched_data.y.view(-1).float()
-                def forward(perturb): return self(batched_data, perturb)
-                model_forward = (self, forward)
-                n_graph, n_node = batched_data.x.size()[:2]
-                perturb_shape = (n_graph, n_node, self.hidden_dim)
-
-                optimizer = self.optimizers()
-                optimizer.zero_grad()
-                loss, _ = flag_bounded(model_forward, perturb_shape, y_gt, optimizer, batched_data.x.device, self.loss_fn,
-                                       m=self.flag_m, step_size=self.flag_step_size, mag=self.flag_mag)
-                self.lr_schedulers().step()
-        else:
-            y_hat = self(batched_data).view(-1)
-            y_gt = batched_data.y.view(-1)
-            y_pred = self(batched_data).detach()
-            y_true = batched_data.y
-            print(f'y_hat:{y_hat} y_gt:{y_gt}')
-            loss = NTXentLoss()(y_hat, y_gt)
-        # self.log('train_loss', loss)
-
-        logAUC = calculate_logAUC(y_true.cpu().numpy(), y_pred.cpu().numpy(), FPR_range=logAUC_range)
-        return {"loss": loss, "logAUC": logAUC, "y_pred": y_pred, "y_true": y_true}
-
-
 
 
 class FeedForwardNetwork(nn.Module):

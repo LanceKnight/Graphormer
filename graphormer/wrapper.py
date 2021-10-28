@@ -16,9 +16,13 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem.rdMolDescriptors import GetMorganFingerprintAsBitVect
 from ogb.utils import smiles2graph as ogb_smiles2graph
+from ogb.utils.features import atom_to_feature_vector
+import networkx as nx
+from torch_geometric.utils.convert import to_networkx
+from random import randint
 
 pyximport.install(setup_args={'include_dirs': np.get_include()})
-# import algos
+import algos
 
 pattern_dict = {'[NH-]': '[N-]'}
 
@@ -433,9 +437,9 @@ class MyQSARDataset(InMemoryDataset):
         data_smiles_series.to_csv(os.path.join(
             self.processed_dir, f'{self.dataset}-smiles.csv'), index=False, header=False)
 
-        print(f'data length:{len(data_list)}')
-        for data in data_list:
-            print(data)
+        # print(f'data length:{len(data_list)}')
+        # for data in data_list:
+        #     print(data)
         data, slices = self.collate(data_list)
         torch.save((data, slices), self.processed_paths[0])
 
@@ -456,3 +460,105 @@ class MyQSARDataset(InMemoryDataset):
             return preprocess_item(item)
         else:
             return self.index_select(idx)
+
+
+class AugmentedDataset(InMemoryDataset):
+    def __init__(self, root=None, transform=None, pre_transform=None, pre_filter=None, generate_num=None, empty=False    ):
+        self.root = root
+        self.generate_num = generate_num
+        self.train_set =[]
+        super(AugmentedDataset, self).__init__(root, transform, pre_transform, pre_filter)
+        self.transform, self.pre_transform, self.pre_filter = transform, pre_transform, pre_filter
+        if not empty:
+            self.data, self.slices = torch.load(self.processed_paths[0])
+
+    def raw_file_names(self):
+
+        return None
+
+    @property
+    def processed_file_names(self):
+        return f'pretraining-data.pt'
+
+    def randomly_add_node(self, graph_dict):
+        print(f'type:{type(graph_dict["edge_index"])}')
+        data = Data(x = torch.tensor(graph_dict['node_feat']), edge_index = torch.tensor(graph_dict['edge_index']), edge_attr=torch.tensor(graph_dict['edge_feat']), num_nodes = torch.tensor(graph_dict['num_nodes']))
+        old_graph = to_networkx(data)
+        old_nodes = old_graph.nodes
+        num_old_nodes = len(old_nodes)
+        randn = randint(0, num_old_nodes - 1)
+
+        new_node = torch.tensor(atom_to_feature_vector())
+        # new_node = torch.tensor(get_atom_rep(6))
+        # print(new_node.unsqueeze(-1).shape)
+        # print(data.x.shape)
+        x = torch.cat((data.x, new_node.unsqueeze(0)), dim=0)
+
+        new_edge = torch.tensor([[randn, num_old_nodes], [num_old_nodes, randn]])
+        edge_index = torch.cat((data.edge_index, new_edge), dim=1)
+        # print(edge_index)
+
+        new_edge_attr = torch.tensor([[1], [1]])
+        edge_attr = torch.cat((data.edge_attr, new_edge_attr), dim=0)
+
+        new_p = torch.tensor([0, 0]).unsqueeze(0)
+        p = torch.cat((data.p, new_p), dim=0)
+
+        data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr, p=p)
+        # print(data)
+        return data
+
+    def generate_2D_molecule_from_reference(self, smiles, num):
+        '''generate molecules with similar connectivity with the reference molecule
+        smiles: input molecule
+        num: number of augmented molecules to generate
+        '''
+        graph_dict = ogb_smiles2graph(smiles)
+
+        output_list = []
+        for i in range(num):
+            new_mol = self.randomly_add_node(graph_dict)
+            output_list.append(new_mol)
+        return output_list
+
+    def process(self):
+        raw_list = ['C1(=CC=CC(=C1)C(CC)C)O', 'CC1=C(C=C(C=C1)NC(=O)C2=CC=C(C=C2)CN3CCN(CC3)C)NC4=NC=CC(=N4)C5=CN=CC=C5']
+        data_list = []
+        for idx, smi in enumerate(raw_list):
+            data = ogb_smiles2graph(smi)
+            data['labels'] = idx
+            # print(f'setup data:{data}')
+            augmented_list = self.generate_2D_molecule_from_reference(smi, self.generate_num)
+
+            data_list.append(data)
+            data['root_smiles'] = smi
+            data.is_root = True
+            for gen_smi_data in augmented_list:
+                gen_smi_data['labels'] = idx
+                if smi == 'C1(=CC=CC(=C1)C(CC)C)O':
+                    gen_smi_data['root_smiles'] = 'short'
+                else:
+                    gen_smi_data['root_smiles'] = 'long'
+                gen_smi_data['is_root'] = False
+                data_list.append(gen_smi_data)
+        print('data_list')
+        for item in data_list:
+            print(f'{type(item)}')
+
+        data, slices = self.collate(data_list)
+        torch.save((data, slices), self.processed_paths[0])
+
+    def __getitem__(self, idx):
+        if isinstance(idx, int):
+            item = self.get(self.indices()[idx])
+            item.idx = idx
+            return item
+        else:
+            return self.index_select(idx)
+
+
+
+
+
+
+
