@@ -130,7 +130,7 @@ def cli_main(logger):
         trainer.fit(model, datamodule=dm)
 
 
-task = Task.init(project_name="Tests/Graphormer", task_name="AUC test", tags=["graphormer", "debug", "qsar"])
+task = Task.init(project_name="Tests/Graphormer", task_name="AUC test", tags=["graphormer", "debug", "qsar", "imbalanced"])
 
 if __name__ == '__main__':
     logger = task.get_logger()

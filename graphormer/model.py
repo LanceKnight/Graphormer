@@ -310,7 +310,7 @@ class Graphormer(pl.LightningModule):
 
             # print(f'input_dict:{input_dict["y_true"]}')
             # input_dict['y_true'][0] = 0
-            print(f'valid epoch end y-true:\n{input_dict["y_true"].cpu().numpy()}\ny-pred:\n{input_dict["y_pred"]})')
+            # print(f'valid epoch end y-true:\n{input_dict["y_true"].cpu().numpy()}\ny-pred:\n{input_dict["y_pred"]})')
 
             accumulate_logAUC = 0
             # num_samples = len(input_dict['y_true'])
