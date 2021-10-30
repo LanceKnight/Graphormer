@@ -11,6 +11,7 @@ from evaluation import calculate_logAUC, calculate_ppv
 from pytorch_metric_learning.losses import NTXentLoss
 from utils.flag import flag_bounded
 from typing import List, Dict
+import numpy as np
 
 logAUC_range = (0.001, 0.1)
 
@@ -120,7 +121,7 @@ class Graphormer(pl.LightningModule):
         in_degree, out_degree = batched_data.in_degree, batched_data.in_degree
         edge_input, attn_edge_type = batched_data.edge_input, batched_data.attn_edge_type
         # graph_attn_bias
-
+        print(f'input x:{x.shape}')
         # print(f'attn_bias:{attn_bias.shape}\n{attn_bias}')
         # print(f'x:{x.shape}\n{x}')
         n_graph, n_node = x.size()[:2]
@@ -187,26 +188,27 @@ class Graphormer(pl.LightningModule):
         for enc_layer in self.layers:
             output = enc_layer(output, graph_attn_bias)
         output = self.final_ln(output)
-
+        graph_embedding = output[:,0,:]
         # output part
         if self.dataset_name == 'PCQM4M-LSC':
             # get whole graph rep
             output = self.out_proj(output[:, 0, :])
         else:
             output = self.downstream_out_proj(output[:, 0, :])
-        return output
+
+        return output, graph_embedding
 
     def training_step(self, batched_data, batch_idx):
         print(f'\ntraining running')
         if self.dataset_name == 'ogbg-molpcba':
             if not self.flag:
-                y_hat = self(batched_data).view(-1)
-                y_gt = batched_data.y.view(-1).float()
-                mask = ~torch.isnan(y_gt)
-                loss = self.loss_fn(y_hat[mask], y_gt[mask])
+                y_pred = self(batched_data).view(-1)
+                y_true = batched_data.y.view(-1).float()
+                mask = ~torch.isnan(y_true)
+                loss = self.loss_fn(y_pred[mask], y_true[mask])
             else:
-                y_gt = batched_data.y.view(-1).float()
-                mask = ~torch.isnan(y_gt)
+                y_true = batched_data.y.view(-1).float()
+                mask = ~torch.isnan(y_true)
 
                 def forward(perturb): return self(batched_data, perturb)
                 model_forward = (self, forward)
@@ -215,17 +217,17 @@ class Graphormer(pl.LightningModule):
 
                 optimizer = self.optimizers()
                 optimizer.zero_grad()
-                loss, _ = flag_bounded(model_forward, perturb_shape, y_gt[mask], optimizer, batched_data.x.device, self.loss_fn,
+                loss, _ = flag_bounded(model_forward, perturb_shape, y_true[mask], optimizer, batched_data.x.device, self.loss_fn,
                                        m=self.flag_m, step_size=self.flag_step_size, mag=self.flag_mag, mask=mask)
                 self.lr_schedulers().step()
 
         elif self.dataset_name == 'ogbg-molhiv':
             if not self.flag:
-                y_hat = self(batched_data).view(-1)
-                y_gt = batched_data.y.view(-1).float()
-                loss = self.loss_fn(y_hat, y_gt)
+                y_pred = self(batched_data).view(-1)
+                y_true = batched_data.y.view(-1).float()
+                loss = self.loss_fn(y_pred, y_true)
             else:
-                y_gt = batched_data.y.view(-1).float()
+                y_true = batched_data.y.view(-1).float()
                 def forward(perturb): return self(batched_data, perturb)
                 model_forward = (self, forward)
                 n_graph, n_node = batched_data.x.size()[:2]
@@ -233,20 +235,24 @@ class Graphormer(pl.LightningModule):
 
                 optimizer = self.optimizers()
                 optimizer.zero_grad()
-                loss, _ = flag_bounded(model_forward, perturb_shape, y_gt, optimizer, batched_data.x.device, self.loss_fn,
+                loss, _ = flag_bounded(model_forward, perturb_shape, y_true, optimizer, batched_data.x.device, self.loss_fn,
                                        m=self.flag_m, step_size=self.flag_step_size, mag=self.flag_mag)
                 self.lr_schedulers().step()
         else:
-            y_hat = self(batched_data).view(-1)
-            y_gt = batched_data.y.view(-1)
-            y_pred = self(batched_data).detach()
+            output = self(batched_data)
+            y_pred, emb = output[0].view(-1), output[1]
+            y_pred_numpy = y_pred.detach().cpu().numpy()
+            y_true = batched_data.y.view(-1)
+            y_true_numpy = y_true.cpu().numpy()
+
+            # y_pred = self(batched_data).detach()
             y_true = batched_data.y
-            print(f'y_hat:{y_hat} y_gt:{y_gt}')
-            loss = self.loss_fn(y_hat, y_gt.float())
+            print(f'y_pred:{y_pred} y_true:{y_true}')
+            loss = self.loss_fn(y_pred, y_true.float())
         # self.log('train_loss', loss)
 
-        logAUC = calculate_logAUC(y_true.cpu().numpy(), y_pred.cpu().numpy(), FPR_range=logAUC_range)
-        return {"loss": loss, "logAUC": logAUC, "y_pred": y_pred, "y_true": y_true}
+        logAUC = calculate_logAUC(y_true_numpy, y_pred_numpy, FPR_range=logAUC_range)
+        return {"loss": loss, "logAUC": logAUC, "y_pred": y_pred_numpy, "y_true": y_true_numpy}
 
     def training_epoch_end(self, outputs: List[Dict]) -> None:
         epoch_outputs = {}
@@ -258,13 +264,13 @@ class Graphormer(pl.LightningModule):
                 mean_output = sum(output[key] for output in outputs) / len(outputs)
                 epoch_outputs[key] = mean_output
 
-        y_pred = torch.cat([i['y_pred'] for i in outputs])
-        y_true = torch.cat([i['y_true'] for i in outputs])
+        y_pred = np.concatenate([i['y_pred'] for i in outputs])
+        y_true = np.concatenate([i['y_true'] for i in outputs])
         input_dict = {"y_true": y_true, "y_pred": y_pred}
 
-        # print(f'end: y_pred:{y_pred}, y_true:{y_true}')
-        logAUC = calculate_logAUC(input_dict['y_true'].cpu().numpy(), input_dict['y_pred'].cpu().numpy(), FPR_range=logAUC_range)
-        ppv = calculate_ppv(input_dict['y_true'].cpu().numpy(), input_dict['y_pred'].cpu().numpy())
+        print(f'end: y_pred:{y_pred}, y_true:{y_true}')
+        logAUC = calculate_logAUC(input_dict['y_true'], input_dict['y_pred'], FPR_range=logAUC_range)
+        ppv = calculate_ppv(input_dict['y_true'], input_dict['y_pred'])
 
         epoch_outputs['logAUC'] = logAUC
         epoch_outputs['ppv'] = ppv
@@ -273,15 +279,17 @@ class Graphormer(pl.LightningModule):
     def validation_step(self, batched_data, batch_idx):
         print(f'\nvalidation step running')
         if self.dataset_name in ['PCQM4M-LSC', 'ZINC']:
-            y_pred = self(batched_data).view(-1)
+            output = self(batched_data)
+            y_pred, emb = output[0].view(-1), output[1]
             y_true = batched_data.y.view(-1)
         else:
-            y_pred = self(batched_data)
+            y_pred, emb = self(batched_data)
             y_true = batched_data.y
             # print(f'batched_data.y')
         return {
             'y_pred': y_pred,
             'y_true': y_true,
+            'emb':emb
         }
 
         # return {"logAUC":15}
@@ -289,7 +297,7 @@ class Graphormer(pl.LightningModule):
     def validation_epoch_end(self, outputs):
         print(f'\nvalidation step finishing 123self.metric:{self.metric}')
         # print(f'model output:{outputs}')
-        y_pred = torch.cat([i['y_pred'] for i in outputs])
+        y_pred = torch.cat([output['y_pred'] for output in outputs])
         y_true = torch.cat([i['y_true'] for i in outputs])
         if self.dataset_name == 'ogbg-molpcba':
             mask = ~torch.isnan(y_true)
@@ -308,7 +316,7 @@ class Graphormer(pl.LightningModule):
 
             # print(f'input_dict:{input_dict["y_true"]}')
             # input_dict['y_true'][0] = 0
-            print(f'valid epoch end y-true:\n{input_dict["y_true"].cpu().numpy()}\ny-pred:\n{input_dict["y_pred"]})')
+            # print(f'valid epoch end y-true:\n{input_dict["y_true"].cpu().numpy()}\ny-pred:\n{input_dict["y_pred"]})')
 
             accumulate_logAUC = 0
             # num_samples = len(input_dict['y_true'])
@@ -438,7 +446,8 @@ class SelfSupervisedGraphormer(Graphormer):
         print(f'\ntraining running')
         if self.dataset_name == 'ogbg-molpcba':
             if not self.flag:
-                y_hat = self(batched_data).view(-1)
+                output =  self(batched_data)
+                y_hat, emb = output[0].view(-1), output[1]
                 y_gt = batched_data.y.view(-1).float()
                 mask = ~torch.isnan(y_gt)
                 loss = self.loss_fn(y_hat[mask], y_gt[mask])
@@ -474,18 +483,38 @@ class SelfSupervisedGraphormer(Graphormer):
                                        m=self.flag_m, step_size=self.flag_step_size, mag=self.flag_mag)
                 self.lr_schedulers().step()
         else:
-            y_hat = self(batched_data).view(-1)
+            output =self(batched_data)
+            _, emb = output[0].view(-1), output[1]
             y_gt = batched_data.y.view(-1)
-            y_pred = self(batched_data).detach()
             y_true = batched_data.y
-            print(f'y_hat:{y_hat} y_gt:{y_gt}')
-            loss = NTXentLoss()(y_hat, y_gt)
+            print(f'emb:{emb} y_gt:{y_gt}')
+            loss = NTXentLoss()(emb, y_gt)
         # self.log('train_loss', loss)
 
-        logAUC = calculate_logAUC(y_true.cpu().numpy(), y_pred.cpu().numpy(), FPR_range=logAUC_range)
-        return {"loss": loss, "logAUC": logAUC, "y_pred": y_pred, "y_true": y_true}
+        # logAUC = calculate_logAUC(y_true.cpu().numpy(), y_pred.cpu().numpy(), FPR_range=logAUC_range)
+        return {"loss": loss}
 
+    def training_epoch_end(self, outputs: List[Dict]) -> None:
+        epoch_outputs = {}
+        y_pred = []
+        y_true = []
+        print(f'len output:{len(outputs)}')
+        for key in outputs[0].keys():
+            if (key != 'y_pred') and (key != 'y_true'):
+                mean_output = sum(output[key] for output in outputs) / len(outputs)
+                epoch_outputs[key] = mean_output
 
+        # y_pred = torch.cat([i['y_pred'] for i in outputs])
+        # y_true = torch.cat([i['y_true'] for i in outputs])
+        # input_dict = {"y_true": y_true, "y_pred": y_pred}
+        #
+        # print(f'end: y_pred:{y_pred}, y_true:{y_true}')
+        # logAUC = calculate_logAUC(input_dict['y_true'].cpu().numpy(), input_dict['y_pred'].cpu().numpy(), FPR_range=logAUC_range)
+        # ppv = calculate_ppv(input_dict['y_true'].cpu().numpy(), input_dict['y_pred'].cpu().numpy())
+        #
+        # epoch_outputs['logAUC'] = logAUC
+        # epoch_outputs['ppv'] = ppv
+        self.train_epoch_outputs = epoch_outputs
 
 
 class FeedForwardNetwork(nn.Module):

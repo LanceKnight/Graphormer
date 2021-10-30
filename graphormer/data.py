@@ -9,7 +9,7 @@ import torch
 from torch.nn import functional as F
 from torch.nn import BCEWithLogitsLoss
 from torch.utils.data import DataLoader, WeightedRandomSampler
-from  torch_geometric.data import DataLoader as PyGDataLoader
+# from  torch_geometric.data import DataLoader as PyGDataLoader
 import ogb
 import ogb.lsc
 import ogb.graphproppred
@@ -155,6 +155,8 @@ class GraphDataModule(LightningDataModule):
         return loader
 
     def val_dataloader(self):
+        for i in range(5):
+            print(f'first data:{self.dataset_val[i]}')
         loader = DataLoader(
             self.dataset_val,
             batch_size=self.batch_size,
@@ -165,8 +167,8 @@ class GraphDataModule(LightningDataModule):
                                'max_node'], multi_hop_max_dist=self.multi_hop_max_dist, spatial_pos_max=self.spatial_pos_max),
         )
         print('len(val_dataloader)', len(loader))
-        for batch in loader:
-            print(batch.y)
+        # for batch in loader:
+        #     print(batch.y)
         return loader
 
     def test_dataloader(self):
@@ -200,25 +202,27 @@ class AugmentedDataModule(LightningDataModule):
         self.batch_size = batch_size
         self.generate_num = generate_num
         self.metric = 'loss'
+        self.multi_hop_max_dist = multi_hop_max_dist
+        self.spatial_pos_max = spatial_pos_max
+
 
     def setup(self, stage= None):
         self.train_set = AugmentedDataset(root = '../../dataset/pretraining_data', generate_num=self.generate_num)
-
         self.val_set = self.train_set
+        print(f'len(trainset):{len(self.train_set)} len(val_set):{len(self.val_set)}')
+
 
     def train_dataloader(self):
         print('train loader here')
-        loader = PyGDataLoader(self.train_set, batch_size=self.batch_size, shuffle=True)
-        print(f'loader:{len(loader)}')
+        loader = DataLoader(self.train_set, batch_size=self.batch_size, shuffle=True, collate_fn=partial(collator, max_node=38, multi_hop_max_dist=self.multi_hop_max_dist, spatial_pos_max=self.spatial_pos_max),)
         # for batch in loader:
         #     print(batch)
         return loader
 
     def val_dataloader(self):
         print('validation loader here')
-
-        return PyGDataLoader(self.val_set, batch_size=self.batch_size)
-
+        loader = DataLoader(self.val_set, batch_size=self.batch_size, collate_fn=partial(collator, max_node=38, multi_hop_max_dist=self.multi_hop_max_dist, spatial_pos_max=self.spatial_pos_max),)
+        return loader
 
         # # test set
         # smi = 'C1(=CC=CC(=C1)C(CC)C)O'

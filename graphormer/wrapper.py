@@ -416,7 +416,7 @@ class MyQSARDataset(InMemoryDataset):
                 data.edge_index = torch.from_numpy(graph['edge_index']).to(torch.int64)
                 data.edge_attr = torch.from_numpy(graph['edge_feat']).to(torch.int64)
                 data.x = torch.from_numpy(graph['node_feat']).to(torch.int64)
-                # data.y = torch.Tensor([homolumogap])
+
 
                 data.idx = i
                 data.y = torch.tensor([label], dtype = torch.float32)
@@ -446,9 +446,9 @@ class MyQSARDataset(InMemoryDataset):
     def get_idx_split(self):
         split_dict = {}
         # total 362 actives. split: train-290, 36, 36
-        split_dict['train'] = [torch.tensor(x) for x in range(0, 50)] + [torch.tensor(x) for x in range(1000, 9425)] #  training
+        split_dict['train'] = [torch.tensor(x) for x in range(0, 290)] + [torch.tensor(x) for x in range(1000, 1510)] #  training
         # split_dict['valid'] = [torch.tensor(x) for x in range(0, 290)] + [torch.tensor(x) for x in range(1000, 1510)] # 800 training
-        split_dict['valid'] = [torch.tensor(x) for x in range(50, 100)] + [torch.tensor(x) for x in range(10000, 18425)] # 100 valid
+        split_dict['valid'] = [torch.tensor(x) for x in range(290, 326)] + [torch.tensor(x) for x in range(2000, 2064)] # 100 valid
         split_dict['test'] = [torch.tensor(x) for x in range(326, 362 )]+ [torch.tensor(x) for x in range(3000, 9066)] # 100 test
         # split_dict = replace_numpy_with_torchtensor(torch.load(osp.join(self.root, 'split_dict.pt')))
         return split_dict
@@ -480,70 +480,118 @@ class AugmentedDataset(InMemoryDataset):
     def processed_file_names(self):
         return f'pretraining-data.pt'
 
-    def randomly_add_node(self, graph_dict):
-        print(f'type:{type(graph_dict["edge_index"])}')
-        data = Data(x = torch.tensor(graph_dict['node_feat']), edge_index = torch.tensor(graph_dict['edge_index']), edge_attr=torch.tensor(graph_dict['edge_feat']), num_nodes = torch.tensor(graph_dict['num_nodes']))
-        old_graph = to_networkx(data)
-        old_nodes = old_graph.nodes
-        num_old_nodes = len(old_nodes)
-        randn = randint(0, num_old_nodes - 1)
+    def randomly_add_atom(self, mol, num_atom=2, added_atomic_num = 6):
+        '''randomly add x number of atoms to the molecule
+        mol: a rdkit mol object
+        num_atom: number of atoms to be added
+        added_atomic_num: the atomic number for the new atom. Default is to add carbon, hence 6 for the atomic number
+        '''
 
-        new_node = torch.tensor(atom_to_feature_vector())
-        # new_node = torch.tensor(get_atom_rep(6))
-        # print(new_node.unsqueeze(-1).shape)
-        # print(data.x.shape)
-        x = torch.cat((data.x, new_node.unsqueeze(0)), dim=0)
+        new_mol = mol
 
-        new_edge = torch.tensor([[randn, num_old_nodes], [num_old_nodes, randn]])
-        edge_index = torch.cat((data.edge_index, new_edge), dim=1)
-        # print(edge_index)
+        for i in range(num_atom):
+            new_mol = Chem.RWMol(new_mol)
+            #         new_atom = Chem.Atom('Cl')
+            #         new_mol.AddAtom(new_atom)
+            num_atom = new_mol.GetNumAtoms()
+            new_atom_id = num_atom - 1
 
-        new_edge_attr = torch.tensor([[1], [1]])
-        edge_attr = torch.cat((data.edge_attr, new_edge_attr), dim=0)
+            #         print(f'total num:{num_atom}')
+            invalid = True
+            #         random_atom_id = 0
+            #         explicit_Hs = 0
+            #         implicit_Hs = 0
+            #         total_Hs = 0
+            while (invalid == True):
+                random_atom_id = randint(0, num_atom - 2)
+                print(f'random_atom_id:{random_atom_id}')
+                atom = new_mol.GetAtomWithIdx(random_atom_id)
+                total_Hs = atom.GetTotalNumHs()
 
-        new_p = torch.tensor([0, 0]).unsqueeze(0)
-        p = torch.cat((data.p, new_p), dim=0)
+                #             print(f'id = {random_atom_id } symbol:{atom.GetSymbol()} total_Hs:{total_Hs} implicit_Hs:{implicit_Hs} explicit_Hs:{explicit_Hs} total_valence:{total_valence} implicit valence:{implicit_valence} explicit_val:{explicit_valence}')
+                if (total_Hs > 0):
+                    invalid = False
+            bt = Chem.BondType.SINGLE
+            #         print(f'explicit:{explicit_Hs} random_atom_id:{random_atom_id}')
 
-        data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr, p=p)
-        # print(data)
-        return data
+            new_mol.UpdatePropertyCache()
+            new_mol = Chem.AddHs(new_mol)
+            atom = new_mol.GetAtomWithIdx(random_atom_id)
+            for nbr in atom.GetNeighbors():
+                print(f'nbr:{nbr.GetAtomicNum()}')
+                if nbr.GetAtomicNum() == 1:
+                    # print('replced')
+                    nbr.SetAtomicNum(added_atomic_num)
+                    break
+            new_mol = Chem.RemoveAllHs(new_mol)
+            #             for bond in atom.GetBonds():
+            #                 print(f'begin:{bond.GetBeginAtom().GetAtomicNum()} end:{bond.GetEndAtom().GetAtomicNum()}')
+            #                 if (bond.GetBeginAtom().GetAtomicNum() ==1) or (bond.GetEndAtom().GetAtomicNum() ==1):
+            #                     print('replaced')
+            #                     nbr.SetAtomicNum(19)
+
+            #         elif implicit_Hs>0:
+            #             print(f'***num_atom-1:{new_atom_id} a2:{random_atom_id }')
+
+            #             new_mol.AddBond(new_atom_id, random_atom_id, bt)
+
+            try:
+                Chem.SanitizeMol(new_mol)
+            except Exception as e:
+                print(f'generated molecule didn\'t pass sanitization test!atom_id:{new_atom_id}-{e}')
+        return new_mol
 
     def generate_2D_molecule_from_reference(self, smiles, num):
-        '''generate molecules with similar connectivity with the reference molecule
+        '''generate molecules with similar connectivity with the reference molecule, input smiles, output mol
         smiles: input molecule
         num: number of augmented molecules to generate
         '''
-        graph_dict = ogb_smiles2graph(smiles)
+        mol = Chem.MolFromSmiles(smiles)
+
 
         output_list = []
         for i in range(num):
-            new_mol = self.randomly_add_node(graph_dict)
+            new_mol = self.randomly_add_atom(mol, 2, 6)
+
+                # graph_dict = ogb_smiles2graph(smiles)
             output_list.append(new_mol)
         return output_list
+
 
     def process(self):
         raw_list = ['C1(=CC=CC(=C1)C(CC)C)O', 'CC1=C(C=C(C=C1)NC(=O)C2=CC=C(C=C2)CN3CCN(CC3)C)NC4=NC=CC(=N4)C5=CN=CC=C5']
         data_list = []
-        for idx, smi in enumerate(raw_list):
-            data = ogb_smiles2graph(smi)
-            data['labels'] = idx
-            # print(f'setup data:{data}')
-            augmented_list = self.generate_2D_molecule_from_reference(smi, self.generate_num)
+        for idx, smi in tqdm(enumerate(raw_list)):
+            graph = ogb_smiles2graph(smi)
+            data = Data()
+            data.x = torch.from_numpy(graph['node_feat']).to(torch.int64)
+            data.edge_index = torch.from_numpy(graph['edge_index']).to(torch.int64)
+            data.edge_attr = torch.from_numpy(graph['edge_feat']).to(torch.int64)
 
-            data_list.append(data)
-            data['root_smiles'] = smi
+            data.labels = idx
+            data.y = torch.tensor([idx])
+            data.root_smiles = smi
             data.is_root = True
-            for gen_smi_data in augmented_list:
-                gen_smi_data['labels'] = idx
+            data_list.append(data)
+            # print(f'setup data:{data}')
+            augmented_list = [ogb_smiles2graph(Chem.MolToSmiles(mol)) for mol in self.generate_2D_molecule_from_reference(smi, self.generate_num)]
+
+            for aug_graph in augmented_list:
+                data = Data()
+                data.x = torch.from_numpy(aug_graph['node_feat']).to(torch.int64)
+                data.edge_index = torch.from_numpy(aug_graph['edge_index']).to(torch.int64)
+                data.edge_attr = torch.from_numpy(aug_graph['edge_feat']).to(torch.int64)
+                data.labels = idx
+                data.y = torch.tensor([idx])
                 if smi == 'C1(=CC=CC(=C1)C(CC)C)O':
-                    gen_smi_data['root_smiles'] = 'short'
+                    data.root_smiles = 'short'
                 else:
-                    gen_smi_data['root_smiles'] = 'long'
-                gen_smi_data['is_root'] = False
-                data_list.append(gen_smi_data)
+                    data.root_smiles = 'long'
+                data.is_root = False
+                data_list.append(data)
         print('data_list')
         for item in data_list:
-            print(f'{type(item)}')
+            print(f'{item}')
 
         data, slices = self.collate(data_list)
         torch.save((data, slices), self.processed_paths[0])
@@ -552,7 +600,8 @@ class AugmentedDataset(InMemoryDataset):
         if isinstance(idx, int):
             item = self.get(self.indices()[idx])
             item.idx = idx
-            return item
+            # print('triggered')
+            return preprocess_item(item)
         else:
             return self.index_select(idx)
 

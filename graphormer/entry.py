@@ -22,7 +22,7 @@ def cli_main(logger):
     parser = Graphormer.add_model_specific_args(parser)
     parser = GraphDataModule.add_argparse_args(parser)
     args = parser.parse_args()
-    args.max_steps = args.tot_updates + 1
+    # args.max_steps = args.tot_updates + 1
     # print(f'args.max_steps:{args.max_steps}')
     if not args.test and not args.validate:
         print(args)
@@ -163,11 +163,13 @@ def cli_main(logger):
     self_supervised_trainer.callbacks.append(pretrain_checkpoint_callback)
     self_supervised_trainer.callbacks.append(LossMonitor(stage='train', logger=logger, logging_interval='step', title='pretrain_'))
     self_supervised_trainer.callbacks.append(LossMonitor(stage='train', logger=logger, logging_interval='epoch', title='pretrain_'))
-    self_supervised_trainer.fit(pretrain_model, augmented_dataset)
+    self_supervised_trainer.callbacks.append(LearningRateMonitor(logging_interval='step'))
+    # self_supervised_trainer.fit(pretrain_model, augmented_dataset)
+
 
     if not args.test and not args.validate and os.path.exists(dirpath + '/last.ckpt'):
         args.resume_from_checkpoint = dirpath + '/last.ckpt'
-        print('args.resume_from_checkpoint', args.resume_from_checkpoint)
+        print('actual training args.resume_from_checkpoint', args.resume_from_checkpoint)
 
     trainer = pl.Trainer.from_argparse_args(args)
     trainer.callbacks.append(checkpoint_callback)
