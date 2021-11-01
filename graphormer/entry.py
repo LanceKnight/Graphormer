@@ -22,7 +22,7 @@ def cli_main(logger):
     parser = Graphormer.add_model_specific_args(parser)
     parser = GraphDataModule.add_argparse_args(parser)
     args = parser.parse_args()
-    # args.max_steps = args.tot_updates + 1
+    args.max_steps = args.tot_updates + 1
     # print(f'args.max_steps:{args.max_steps}')
     if not args.test and not args.validate:
         print(args)
@@ -39,7 +39,7 @@ def cli_main(logger):
     print(f'=========================')
     print(f'checkpoint_path:{args.checkpoint_path}')
     if args.checkpoint_path != '':
-        print(f'option1')
+        print('loading pretrain model')
         model = Graphormer.load_from_checkpoint(
             args.checkpoint_path,
             strict=False,
@@ -63,28 +63,28 @@ def cli_main(logger):
             flag_step_size=args.flag_step_size,
         )
 
-        pretrain_model = SelfSupervisedGraphormer(
-            args.checkpoint_path,
-            strict = False,
-            n_layers=args.n_layers,
-            num_heads=args.num_heads,
-            hidden_dim=args.hidden_dim,
-            attention_dropout_rate=args.attention_dropout_rate,
-            dropout_rate=args.dropout_rate,
-            intput_dropout_rate=args.intput_dropout_rate,
-            weight_decay=args.weight_decay,
-            ffn_dim=args.ffn_dim,
-            dataset_name=dm.dataset_name,
-            warmup_updates=args.warmup_updates,
-            tot_updates=args.tot_updates,
-            peak_lr=args.peak_lr,
-            end_lr=args.end_lr,
-            edge_type=args.edge_type,
-            multi_hop_max_dist=args.multi_hop_max_dist,
-            flag=args.flag,
-            flag_m=args.flag_m,
-            flag_step_size=args.flag_step_size,
-        )
+        # pretrain_model = SelfSupervisedGraphormer(
+        #     args.checkpoint_path,
+        #     strict = False,
+        #     n_layers=args.n_layers,
+        #     num_heads=args.num_heads,
+        #     hidden_dim=args.hidden_dim,
+        #     attention_dropout_rate=args.attention_dropout_rate,
+        #     dropout_rate=args.dropout_rate,
+        #     intput_dropout_rate=args.intput_dropout_rate,
+        #     weight_decay=args.weight_decay,
+        #     ffn_dim=args.ffn_dim,
+        #     dataset_name=dm.dataset_name,
+        #     warmup_updates=args.warmup_updates,
+        #     tot_updates=args.tot_updates,
+        #     peak_lr=args.peak_lr,
+        #     end_lr=args.end_lr,
+        #     edge_type=args.edge_type,
+        #     multi_hop_max_dist=args.multi_hop_max_dist,
+        #     flag=args.flag,
+        #     flag_m=args.flag_m,
+        #     flag_step_size=args.flag_step_size,
+        # )
     else:
         print(f'option2')
         model = Graphormer(
@@ -107,26 +107,26 @@ def cli_main(logger):
             flag_m=args.flag_m,
             flag_step_size=args.flag_step_size,
         )
-        pretrain_model = SelfSupervisedGraphormer(
-            n_layers=args.n_layers,
-            num_heads=args.num_heads,
-            hidden_dim=args.hidden_dim,
-            attention_dropout_rate=args.attention_dropout_rate,
-            dropout_rate=args.dropout_rate,
-            intput_dropout_rate=args.intput_dropout_rate,
-            weight_decay=args.weight_decay,
-            ffn_dim=args.ffn_dim,
-            dataset_name=dm.dataset_name,
-            warmup_updates=args.warmup_updates,
-            tot_updates=args.tot_updates,
-            peak_lr=args.peak_lr,
-            end_lr=args.end_lr,
-            edge_type=args.edge_type,
-            multi_hop_max_dist=args.multi_hop_max_dist,
-            flag=args.flag,
-            flag_m=args.flag_m,
-            flag_step_size=args.flag_step_size,
-        )
+    pretrain_model = SelfSupervisedGraphormer(
+        n_layers=args.n_layers,
+        num_heads=args.num_heads,
+        hidden_dim=args.hidden_dim,
+        attention_dropout_rate=args.attention_dropout_rate,
+        dropout_rate=args.dropout_rate,
+        intput_dropout_rate=args.intput_dropout_rate,
+        weight_decay=args.weight_decay,
+        ffn_dim=args.ffn_dim,
+        dataset_name=dm.dataset_name,
+        warmup_updates=args.warmup_updates,
+        tot_updates=args.tot_updates,
+        peak_lr=args.peak_lr,
+        end_lr=args.end_lr,
+        edge_type=args.edge_type,
+        multi_hop_max_dist=args.multi_hop_max_dist,
+        flag=args.flag,
+        flag_m=args.flag_m,
+        flag_step_size=args.flag_step_size,
+    )
     if not args.test and not args.validate:
         print(model)
     print('total params:', sum(p.numel() for p in model.parameters()))
@@ -154,9 +154,10 @@ def cli_main(logger):
         # mode=get_dataset(dm.dataset_name)['metric_mode'],
         save_last=True,
     )
-    if os.path.exists(dirpath + 'pretrain/last.ckpt'):
-        args.resume_from_checkpoint = dirpath + 'pretrain/last.ckpt'
-        print('pretraining args.resume_from_checkpoint', args.resume_from_checkpoint)
+    # if os.path.exists(dirpath + '/pretrain/last.ckpt'):
+    #     print('pretraining checkpoint exists, resuming checkpoint')
+    #     args.resume_from_checkpoint = dirpath + '/pretrain/last.ckpt'
+        # print('pretraining args.resume_from_checkpoint', args.resume_from_checkpoint)
 
 
     self_supervised_trainer = pl.Trainer.from_argparse_args(args)
@@ -167,7 +168,9 @@ def cli_main(logger):
     # self_supervised_trainer.fit(pretrain_model, augmented_dataset)
 
 
+
     if not args.test and not args.validate and os.path.exists(dirpath + '/last.ckpt'):
+        print('actual checkpoint exists')
         args.resume_from_checkpoint = dirpath + '/last.ckpt'
         print('actual training args.resume_from_checkpoint', args.resume_from_checkpoint)
 
@@ -179,6 +182,8 @@ def cli_main(logger):
     trainer.callbacks.append(PPVMonitor(stage='train', logger=logger, logging_interval='epoch'))
     trainer.callbacks.append(LogAUCMonitor(stage='valid',logger=logger, logging_interval='epoch'))
     trainer.callbacks.append(PPVMonitor(stage='valid',logger=logger, logging_interval='epoch'))
+    trainer.callbacks.append(LossMonitor(stage='valid', logger=logger, logging_interval='step'))
+    trainer.callbacks.append(LossMonitor(stage='valid', logger=logger, logging_interval='epoch'))
     # trainer.callbacks.append(LogAUCMonitor(stage='train', logger=logger, logging_interval='step'))
     trainer.callbacks.append(LearningRateMonitor(logging_interval='step'))
 

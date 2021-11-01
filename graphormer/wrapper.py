@@ -25,6 +25,8 @@ pyximport.install(setup_args={'include_dirs': np.get_include()})
 import algos
 
 pattern_dict = {'[NH-]': '[N-]'}
+add_atom_num = 5
+num_reference = 1000 # number of reference molecules for augmentation
 
 
 def smiles_cleaner(smiles):
@@ -384,7 +386,7 @@ class MyQSARDataset(InMemoryDataset):
         data_list = []
 
         if self.dataset not in ['435008', '1798', '435034']:
-            print(f'dataset:{self.dataset}')
+            # print(f'dataset:{self.dataset}')
             raise ValueError('Invalid dataset name')
 
         for file, label in [(f'{self.dataset}_actives.smi', 1),
@@ -480,7 +482,7 @@ class AugmentedDataset(InMemoryDataset):
     def processed_file_names(self):
         return f'pretraining-data.pt'
 
-    def randomly_add_atom(self, mol, num_atom=2, added_atomic_num = 6):
+    def randomly_add_atom(self, mol, num_atom=add_atom_num, added_atomic_num = 6):
         '''randomly add x number of atoms to the molecule
         mol: a rdkit mol object
         num_atom: number of atoms to be added
@@ -504,7 +506,7 @@ class AugmentedDataset(InMemoryDataset):
             #         total_Hs = 0
             while (invalid == True):
                 random_atom_id = randint(0, num_atom - 2)
-                print(f'random_atom_id:{random_atom_id}')
+                # print(f'random_atom_id:{random_atom_id}')
                 atom = new_mol.GetAtomWithIdx(random_atom_id)
                 total_Hs = atom.GetTotalNumHs()
 
@@ -518,7 +520,7 @@ class AugmentedDataset(InMemoryDataset):
             new_mol = Chem.AddHs(new_mol)
             atom = new_mol.GetAtomWithIdx(random_atom_id)
             for nbr in atom.GetNeighbors():
-                print(f'nbr:{nbr.GetAtomicNum()}')
+                # print(f'nbr:{nbr.GetAtomicNum()}')
                 if nbr.GetAtomicNum() == 1:
                     # print('replced')
                     nbr.SetAtomicNum(added_atomic_num)
@@ -559,9 +561,13 @@ class AugmentedDataset(InMemoryDataset):
 
 
     def process(self):
-        raw_list = ['C1(=CC=CC(=C1)C(CC)C)O', 'CC1=C(C=C(C=C1)NC(=O)C2=CC=C(C=C2)CN3CCN(CC3)C)NC4=NC=CC(=N4)C5=CN=CC=C5']
+        file ='../../dataset/pretraining_data/raw/smiles.csv'
+        raw_list = pd.read_csv(file, header=None)[0].tolist()[:1000]
+
+        # raw_list = ['C1(=CC=CC(=C1)C(CC)C)O', 'CC1=C(C=C(C=C1)NC(=O)C2=CC=C(C=C2)CN3CCN(CC3)C)NC4=NC=CC(=N4)C5=CN=CC=C5']
         data_list = []
         for idx, smi in tqdm(enumerate(raw_list)):
+            # print(smi)
             graph = ogb_smiles2graph(smi)
             data = Data()
             data.x = torch.from_numpy(graph['node_feat']).to(torch.int64)
@@ -583,15 +589,15 @@ class AugmentedDataset(InMemoryDataset):
                 data.edge_attr = torch.from_numpy(aug_graph['edge_feat']).to(torch.int64)
                 data.labels = idx
                 data.y = torch.tensor([idx])
-                if smi == 'C1(=CC=CC(=C1)C(CC)C)O':
-                    data.root_smiles = 'short'
-                else:
-                    data.root_smiles = 'long'
+                # if smi == 'C1(=CC=CC(=C1)C(CC)C)O':
+                #     data.root_smiles = 'short'
+                # else:
+                #     data.root_smiles = 'long'
                 data.is_root = False
                 data_list.append(data)
-        print('data_list')
-        for item in data_list:
-            print(f'{item}')
+        # print('data_list')
+        # for item in data_list:
+        #     print(f'{item}')
 
         data, slices = self.collate(data_list)
         torch.save((data, slices), self.processed_paths[0])

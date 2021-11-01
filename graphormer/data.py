@@ -15,7 +15,7 @@ import ogb.lsc
 import ogb.graphproppred
 from functools import partial
 
-
+aug_num = 50
 dataset = None
 
 
@@ -126,7 +126,7 @@ class GraphDataModule(LightningDataModule):
             self.dataset_val = self.dataset['dataset'][split_idx["valid"]]
             print(f'validation len:{len(self.dataset_val)})')
             self.dataset_test = self.dataset['dataset'][split_idx["test"]]
-            print(f'training len:{len(self.dataset_test)})')
+            print(f'testing len:{len(self.dataset_test)})')
 
     def train_dataloader(self):
         num_train_active = len(torch.nonzero(torch.tensor([data.y for data in self.dataset_train])))
@@ -155,8 +155,6 @@ class GraphDataModule(LightningDataModule):
         return loader
 
     def val_dataloader(self):
-        for i in range(5):
-            print(f'first data:{self.dataset_val[i]}')
         loader = DataLoader(
             self.dataset_val,
             batch_size=self.batch_size,
@@ -194,7 +192,7 @@ class AugmentedDataModule(LightningDataModule):
              seed: int = 42,
              multi_hop_max_dist: int = 5,
              spatial_pos_max: int = 1024,
-             generate_num = 50,
+             generate_num = aug_num,
              *args,
              **kwargs,
             ):
@@ -208,7 +206,7 @@ class AugmentedDataModule(LightningDataModule):
 
     def setup(self, stage= None):
         self.train_set = AugmentedDataset(root = '../../dataset/pretraining_data', generate_num=self.generate_num)
-        self.val_set = self.train_set
+        self.val_set = self.train_set[:2]
         print(f'len(trainset):{len(self.train_set)} len(val_set):{len(self.val_set)}')
 
 
@@ -220,7 +218,7 @@ class AugmentedDataModule(LightningDataModule):
         return loader
 
     def val_dataloader(self):
-        print('validation loader here')
+        print('pretrain validation loader here')
         loader = DataLoader(self.val_set, batch_size=self.batch_size, collate_fn=partial(collator, max_node=38, multi_hop_max_dist=self.multi_hop_max_dist, spatial_pos_max=self.spatial_pos_max),)
         return loader
 

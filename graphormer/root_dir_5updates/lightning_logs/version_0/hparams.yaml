@@ -1,6 +1,6 @@
 attention_dropout_rate: 0.1
 dataset_name: '435034'
-dropout_rate: 0.25
+dropout_rate: 0.5
 edge_type: multi_hop
 end_lr: 1.0e-09
 ffn_dim: 128

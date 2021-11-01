@@ -120,10 +120,7 @@ class Graphormer(pl.LightningModule):
         attn_bias, spatial_pos, x = batched_data.attn_bias, batched_data.spatial_pos, batched_data.x
         in_degree, out_degree = batched_data.in_degree, batched_data.in_degree
         edge_input, attn_edge_type = batched_data.edge_input, batched_data.attn_edge_type
-        # graph_attn_bias
-        print(f'input x:{x.shape}')
-        # print(f'attn_bias:{attn_bias.shape}\n{attn_bias}')
-        # print(f'x:{x.shape}\n{x}')
+
         n_graph, n_node = x.size()[:2]
         graph_attn_bias = attn_bias.clone()
         graph_attn_bias = graph_attn_bias.unsqueeze(1).repeat(
@@ -199,7 +196,7 @@ class Graphormer(pl.LightningModule):
         return output, graph_embedding
 
     def training_step(self, batched_data, batch_idx):
-        print(f'\ntraining running')
+        print(f'\n actual training running')
         if self.dataset_name == 'ogbg-molpcba':
             if not self.flag:
                 y_pred = self(batched_data).view(-1)
@@ -247,7 +244,7 @@ class Graphormer(pl.LightningModule):
 
             # y_pred = self(batched_data).detach()
             y_true = batched_data.y
-            print(f'y_pred:{y_pred} y_true:{y_true}')
+            # print(f'y_pred:{y_pred} y_true:{y_true}')
             loss = self.loss_fn(y_pred, y_true.float())
         # self.log('train_loss', loss)
 
@@ -258,7 +255,7 @@ class Graphormer(pl.LightningModule):
         epoch_outputs = {}
         y_pred = []
         y_true = []
-        print(f'len output:{len(outputs)}')
+        # print(f'len output:{len(outputs)}')
         for key in outputs[0].keys():
             if (key != 'y_pred') and (key != 'y_true'):
                 mean_output = sum(output[key] for output in outputs) / len(outputs)
@@ -268,7 +265,7 @@ class Graphormer(pl.LightningModule):
         y_true = np.concatenate([i['y_true'] for i in outputs])
         input_dict = {"y_true": y_true, "y_pred": y_pred}
 
-        print(f'end: y_pred:{y_pred}, y_true:{y_true}')
+        # print(f'end: y_pred:{y_pred}, y_true:{y_true}')
         logAUC = calculate_logAUC(input_dict['y_true'], input_dict['y_pred'], FPR_range=logAUC_range)
         ppv = calculate_ppv(input_dict['y_true'], input_dict['y_pred'])
 
@@ -277,25 +274,29 @@ class Graphormer(pl.LightningModule):
         self.train_epoch_outputs = epoch_outputs
 
     def validation_step(self, batched_data, batch_idx):
-        print(f'\nvalidation step running')
+        print(f'\nactual validation step running')
         if self.dataset_name in ['PCQM4M-LSC', 'ZINC']:
             output = self(batched_data)
             y_pred, emb = output[0].view(-1), output[1]
             y_true = batched_data.y.view(-1)
         else:
-            y_pred, emb = self(batched_data)
-            y_true = batched_data.y
+            output = self(batched_data)
+            y_pred, emb = output[0].view(-1), output[1]
+            y_true = batched_data.y.view(-1)
+            # print(f'y_pred.shape:{y_pred.shape} y_true:{y_true.shape}')
+            loss = self.loss_fn(y_pred, y_true.float())
             # print(f'batched_data.y')
         return {
             'y_pred': y_pred,
             'y_true': y_true,
+            'loss':loss,
             'emb':emb
         }
 
         # return {"logAUC":15}
 
     def validation_epoch_end(self, outputs):
-        print(f'\nvalidation step finishing 123self.metric:{self.metric}')
+        print(f'\nvalidation step finishing')
         # print(f'model output:{outputs}')
         y_pred = torch.cat([output['y_pred'] for output in outputs])
         y_true = torch.cat([i['y_true'] for i in outputs])
@@ -320,13 +321,14 @@ class Graphormer(pl.LightningModule):
 
             accumulate_logAUC = 0
             # num_samples = len(input_dict['y_true'])
+            mean_loss = sum(output['loss'] for output in outputs) / len(outputs)
 
             logAUC = calculate_logAUC(input_dict['y_true'].cpu().numpy(), input_dict['y_pred'].cpu().numpy(), FPR_range=logAUC_range)
             ppv = calculate_ppv(input_dict['y_true'].cpu().numpy(), input_dict['y_pred'].cpu().numpy())
             #     accumulate_logAUC += logAUC
             # logAUC = accumulate_logAUC / num_samples
             # print(f'logAUC:{logAUC} ppv:{ppv}')
-            self.valid_epoch_outputs = {"logAUC": logAUC, "ppv": ppv}  # self.evaluator.eval(input_dict)
+            self.valid_epoch_outputs = {"logAUC": logAUC, "ppv": ppv, "loss": mean_loss}  # self.evaluator.eval(input_dict)
 
     def test_step(self, batched_data, batch_idx):
         if self.dataset_name in ['PCQM4M-LSC', 'ZINC']:
@@ -443,7 +445,7 @@ class SelfSupervisedGraphormer(Graphormer):
             flag_mag)
 
     def training_step(self, batched_data, batch_idx):
-        print(f'\ntraining running')
+        print(f'\npretraining running')
         if self.dataset_name == 'ogbg-molpcba':
             if not self.flag:
                 output =  self(batched_data)
@@ -487,7 +489,7 @@ class SelfSupervisedGraphormer(Graphormer):
             _, emb = output[0].view(-1), output[1]
             y_gt = batched_data.y.view(-1)
             y_true = batched_data.y
-            print(f'emb:{emb} y_gt:{y_gt}')
+            # print(f'emb:{emb} y_gt:{y_gt}')
             loss = NTXentLoss()(emb, y_gt)
         # self.log('train_loss', loss)
 
@@ -498,7 +500,7 @@ class SelfSupervisedGraphormer(Graphormer):
         epoch_outputs = {}
         y_pred = []
         y_true = []
-        print(f'len output:{len(outputs)}')
+        # print(f'len output:{len(outputs)}')
         for key in outputs[0].keys():
             if (key != 'y_pred') and (key != 'y_true'):
                 mean_output = sum(output[key] for output in outputs) / len(outputs)
@@ -515,6 +517,16 @@ class SelfSupervisedGraphormer(Graphormer):
         # epoch_outputs['logAUC'] = logAUC
         # epoch_outputs['ppv'] = ppv
         self.train_epoch_outputs = epoch_outputs
+    def validation_step(self, batched_data, batch_idx):
+        pass
+    def validation_epoch_end(self, outputs):
+        pass
+
+    @staticmethod
+    def add_model_specific_args(parent_parser):
+        parent_parser = super(SelfSupervisedGraphormer, SelfSupervisedGraphormer).add_model_specific_args(parent_parser)
+        parent_parser.parser.add_argument('--no_validation', type=bool, default=True)
+        return parent_parser
 
 
 class FeedForwardNetwork(nn.Module):
