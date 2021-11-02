@@ -15,7 +15,7 @@ import ogb.lsc
 import ogb.graphproppred
 from functools import partial
 
-aug_num = 50
+aug_num = 5
 dataset = None
 
 

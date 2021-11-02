@@ -26,7 +26,7 @@ import algos
 
 pattern_dict = {'[NH-]': '[N-]'}
 add_atom_num = 5
-num_reference = 1000 # number of reference molecules for augmentation
+num_reference = 10000 # number of reference molecules for augmentation
 
 
 def smiles_cleaner(smiles):
@@ -480,7 +480,7 @@ class AugmentedDataset(InMemoryDataset):
 
     @property
     def processed_file_names(self):
-        return f'pretraining-data.pt'
+        return f'connect_aug.pt'
 
     def randomly_add_atom(self, mol, num_atom=add_atom_num, added_atomic_num = 6):
         '''randomly add x number of atoms to the molecule
@@ -505,7 +505,7 @@ class AugmentedDataset(InMemoryDataset):
             #         implicit_Hs = 0
             #         total_Hs = 0
             while (invalid == True):
-                random_atom_id = randint(0, num_atom - 2)
+                random_atom_id = randint(0, num_atom - 1)
                 # print(f'random_atom_id:{random_atom_id}')
                 atom = new_mol.GetAtomWithIdx(random_atom_id)
                 total_Hs = atom.GetTotalNumHs()
@@ -561,8 +561,8 @@ class AugmentedDataset(InMemoryDataset):
 
 
     def process(self):
-        file ='../../dataset/pretraining_data/raw/smiles.csv'
-        raw_list = pd.read_csv(file, header=None)[0].tolist()[:1000]
+        file ='../../dataset/connect_aug/raw/smiles.csv'
+        raw_list = pd.read_csv(file, header=None)[0].tolist()[:num_reference]
 
         # raw_list = ['C1(=CC=CC(=C1)C(CC)C)O', 'CC1=C(C=C(C=C1)NC(=O)C2=CC=C(C=C2)CN3CCN(CC3)C)NC4=NC=CC(=N4)C5=CN=CC=C5']
         data_list = []
@@ -611,7 +611,8 @@ class AugmentedDataset(InMemoryDataset):
         else:
             return self.index_select(idx)
 
-
+if __name__ == "__main__":
+    dataset = AugmentedDataset(root = '../../connect_aug/', generate_num=5)
 
 
 

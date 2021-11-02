@@ -31,4 +31,4 @@ for smiles in progress:
 
 output_df = pd.DataFrame(output_lst)
 # print(output_df)
-output_df.to_csv('../../dataset/pretraining_data/raw/smiles.csv', index=False, header=False)
+output_df.to_csv('../../dataset/connect_aug/raw/smiles.csv', index=False, header=False)
