@@ -568,33 +568,38 @@ class AugmentedDataset(InMemoryDataset):
         data_list = []
         for idx, smi in tqdm(enumerate(raw_list)):
             # print(smi)
-            graph = ogb_smiles2graph(smi)
-            data = Data()
-            data.x = torch.from_numpy(graph['node_feat']).to(torch.int64)
-            data.edge_index = torch.from_numpy(graph['edge_index']).to(torch.int64)
-            data.edge_attr = torch.from_numpy(graph['edge_feat']).to(torch.int64)
+            try:
+                graph = ogb_smiles2graph(smi)
 
-            data.labels = idx
-            data.y = torch.tensor([idx])
-            data.root_smiles = smi
-            data.is_root = True
-            data_list.append(data)
-            # print(f'setup data:{data}')
-            augmented_list = [ogb_smiles2graph(Chem.MolToSmiles(mol)) for mol in self.generate_2D_molecule_from_reference(smi, self.generate_num)]
-
-            for aug_graph in augmented_list:
                 data = Data()
-                data.x = torch.from_numpy(aug_graph['node_feat']).to(torch.int64)
-                data.edge_index = torch.from_numpy(aug_graph['edge_index']).to(torch.int64)
-                data.edge_attr = torch.from_numpy(aug_graph['edge_feat']).to(torch.int64)
+                data.x = torch.from_numpy(graph['node_feat']).to(torch.int64)
+                data.edge_index = torch.from_numpy(graph['edge_index']).to(torch.int64)
+                data.edge_attr = torch.from_numpy(graph['edge_feat']).to(torch.int64)
+
                 data.labels = idx
                 data.y = torch.tensor([idx])
-                # if smi == 'C1(=CC=CC(=C1)C(CC)C)O':
-                #     data.root_smiles = 'short'
-                # else:
-                #     data.root_smiles = 'long'
-                data.is_root = False
+                data.root_smiles = smi
+                data.is_root = True
                 data_list.append(data)
+                # print(f'setup data:{data}')
+                augmented_list = [ogb_smiles2graph(Chem.MolToSmiles(mol)) for mol in self.generate_2D_molecule_from_reference(smi, self.generate_num)]
+
+                for aug_graph in augmented_list:
+                    data = Data()
+                    data.x = torch.from_numpy(aug_graph['node_feat']).to(torch.int64)
+                    data.edge_index = torch.from_numpy(aug_graph['edge_index']).to(torch.int64)
+                    data.edge_attr = torch.from_numpy(aug_graph['edge_feat']).to(torch.int64)
+                    data.labels = idx
+                    data.y = torch.tensor([idx])
+                    # if smi == 'C1(=CC=CC(=C1)C(CC)C)O':
+                    #     data.root_smiles = 'short'
+                    # else:
+                    #     data.root_smiles = 'long'
+                    data.is_root = False
+                    data_list.append(data)
+            except:
+                pass
+
         # print('data_list')
         # for item in data_list:
         #     print(f'{item}')
@@ -612,7 +617,7 @@ class AugmentedDataset(InMemoryDataset):
             return self.index_select(idx)
 
 if __name__ == "__main__":
-    dataset = AugmentedDataset(root = '../../connect_aug/', generate_num=5)
+    dataset = AugmentedDataset(root = '../../dataset/connect_aug/', generate_num=5)
 
 
 
