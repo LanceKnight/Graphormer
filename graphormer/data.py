@@ -205,7 +205,7 @@ class AugmentedDataModule(LightningDataModule):
 
 
     def setup(self, stage= None):
-        self.train_set = AugmentedDataset(root = '../../dataset/pretraining_data', generate_num=self.generate_num)
+        self.train_set = AugmentedDataset(root = '../../dataset/connect_aug', generate_num=self.generate_num)
         self.val_set = self.train_set[:2]
         print(f'len(trainset):{len(self.train_set)} len(val_set):{len(self.val_set)}')
 

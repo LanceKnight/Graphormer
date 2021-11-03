@@ -1,3 +1,5 @@
+# checking NTXcent = 0 problem
+
 import pandas as pd
 import torch
 from pytorch_metric_learning.losses import NTXentLoss

@@ -386,7 +386,8 @@ class Graphormer(pl.LightningModule):
         parser.add_argument('--weight_decay', type=float, default=0.01)
         parser.add_argument('--attention_dropout_rate',
                             type=float, default=0.1)
-        parser.add_argument('--checkpoint_path', type=str, default='')
+        # parser.add_argument('--checkpoint_path', type=str, default='')
+        parser.add_argument('--pretrain_model_dir', type=str, default='')
         parser.add_argument('--warmup_updates', type=int, default=60000)
         parser.add_argument('--tot_updates', type=int, default=1000000)
         parser.add_argument('--peak_lr', type=float, default=2e-4)
@@ -488,10 +489,16 @@ class SelfSupervisedGraphormer(Graphormer):
             output =self(batched_data)
             _, emb = output[0].view(-1), output[1]
             y_gt = batched_data.y.view(-1)
-            y_true = batched_data.y
             # print(f'emb:{emb} y_gt:{y_gt}')
             loss = NTXentLoss()(emb, y_gt)
         # self.log('train_loss', loss)
+            if loss <0.001:
+                with open(f'analyses/labels_{loss:.2f}.csv', 'w') as f:
+                    emb_numpy = emb.detach().cpu().numpy()
+                    print(f'{emb_numpy}', file = f)
+                with open(f'analyses/gt_{loss:.2f}.csv', 'w') as f:
+                    gt_numpy = y_gt.detach().cpu().numpy()
+                    print(f'{gt_numpy}', file = f)
 
         # logAUC = calculate_logAUC(y_true.cpu().numpy(), y_pred.cpu().numpy(), FPR_range=logAUC_range)
         return {"loss": loss}
