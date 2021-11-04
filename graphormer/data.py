@@ -2,18 +2,20 @@
 # Licensed under the MIT License.
 
 from collator import collator
-from wrapper import MyGraphPropPredDataset, MyPygPCQM4MDataset, MyZINCDataset
+from wrapper import MyGraphPropPredDataset, MyPygPCQM4MDataset, MyZINCDataset, MyQSARDataset, AugmentedDataset
 
 from pytorch_lightning import LightningDataModule
 import torch
 from torch.nn import functional as F
-from torch.utils.data import DataLoader
+from torch.nn import BCEWithLogitsLoss
+from torch.utils.data import DataLoader, WeightedRandomSampler
+# from  torch_geometric.data import DataLoader as PyGDataLoader
 import ogb
 import ogb.lsc
 import ogb.graphproppred
 from functools import partial
 
-
+aug_num = 5
 dataset = None
 
 
@@ -50,7 +52,7 @@ def get_dataset(dataset_name='abaaba'):
             'metric': 'mae',
             'metric_mode': 'min',
             'evaluator': ogb.lsc.PCQM4MEvaluator(),
-            'dataset': MyPygPCQM4MDataset(root='../../dataset'),
+            'dataset': MyPygPCQM4MDataset(root='../../dataset')[:1000],
             'max_node': 128,
         }
     elif dataset_name == 'ZINC':
@@ -65,7 +67,20 @@ def get_dataset(dataset_name='abaaba'):
             'test_dataset': MyZINCDataset(subset=True, root='../../dataset/pyg_zinc', split='test'),
             'max_node': 128,
         }
+    elif dataset_name in ['435008', '1798', '435034']:
+        dataset = {
+            'num_class': 1,
+            'loss_fn': BCEWithLogitsLoss(),
+            'metric': 'LogAUC',
+            'metric_mode': 'min',
+            'evaluator': ogb.lsc.PCQM4MEvaluator(),  # same objective function, so reuse it
+            'dataset': MyQSARDataset(root='../../dataset/qsar', dataset=dataset_name),
+            'num_samples': len(MyQSARDataset(root='../../dataset/qsar', dataset=dataset_name)),
+            'max_node':512
+        }
+
     else:
+        print(f'dataset_name:{dataset_name}')
         raise NotImplementedError
 
     print(f' > {dataset_name} loaded!')
@@ -107,20 +122,36 @@ class GraphDataModule(LightningDataModule):
         else:
             split_idx = self.dataset['dataset'].get_idx_split()
             self.dataset_train = self.dataset['dataset'][split_idx["train"]]
+            print(f'training len:{len(self.dataset_train)})')
             self.dataset_val = self.dataset['dataset'][split_idx["valid"]]
+            print(f'validation len:{len(self.dataset_val)})')
             self.dataset_test = self.dataset['dataset'][split_idx["test"]]
+            print(f'testing len:{len(self.dataset_test)})')
 
     def train_dataloader(self):
+        num_train_active = len(torch.nonzero(torch.tensor([data.y for data in self.dataset_train])))
+        num_train_inactive = len(self.dataset_train) - num_train_active
+        print(f'training size: {len(self.dataset_train)}, actives: {num_train_active}')
+
+        train_sampler_weight = torch.tensor([(1. / num_train_inactive) if data.y == 0 else (1. / num_train_active) for data in self.dataset_train])
+
+        train_sampler = WeightedRandomSampler(train_sampler_weight, len(train_sampler_weight))
+
+
         loader = DataLoader(
             self.dataset_train,
             batch_size=self.batch_size,
             shuffle=True,
+            # sampler= train_sampler,
             num_workers=self.num_workers,
             pin_memory=True,
             collate_fn=partial(collator, max_node=get_dataset(self.dataset_name)[
                                'max_node'], multi_hop_max_dist=self.multi_hop_max_dist, spatial_pos_max=self.spatial_pos_max),
         )
         print('len(train_dataloader)', len(loader))
+        counter = 0
+        for batch in loader:
+            print(batch.y)
         return loader
 
     def val_dataloader(self):
@@ -134,6 +165,8 @@ class GraphDataModule(LightningDataModule):
                                'max_node'], multi_hop_max_dist=self.multi_hop_max_dist, spatial_pos_max=self.spatial_pos_max),
         )
         print('len(val_dataloader)', len(loader))
+        # for batch in loader:
+        #     print(batch.y)
         return loader
 
     def test_dataloader(self):
@@ -147,4 +180,55 @@ class GraphDataModule(LightningDataModule):
                                'max_node'], multi_hop_max_dist=self.multi_hop_max_dist, spatial_pos_max=self.spatial_pos_max),
         )
         print('len(test_dataloader)', len(loader))
+        for batch in loader:
+            print(batch.y)
         return loader
+
+class AugmentedDataModule(LightningDataModule):
+    def __init__(self,
+            dataset_name: str = 'qsar',
+             num_workers: int = 0,
+             batch_size: int = 256,
+             seed: int = 42,
+             multi_hop_max_dist: int = 5,
+             spatial_pos_max: int = 1024,
+             generate_num = aug_num,
+             *args,
+             **kwargs,
+            ):
+        super(AugmentedDataModule, self).__init__()
+        self.batch_size = batch_size
+        self.generate_num = generate_num
+        self.metric = 'loss'
+        self.multi_hop_max_dist = multi_hop_max_dist
+        self.spatial_pos_max = spatial_pos_max
+
+
+    def setup(self, stage= None):
+        self.train_set = AugmentedDataset(root = '../../dataset/connect_aug', generate_num=self.generate_num)
+        self.val_set = self.train_set[:2]
+        print(f'len(trainset):{len(self.train_set)} len(val_set):{len(self.val_set)}')
+
+
+    def train_dataloader(self):
+        print('train loader here')
+        loader = DataLoader(self.train_set, batch_size=self.batch_size, shuffle=True, collate_fn=partial(collator, max_node=38, multi_hop_max_dist=self.multi_hop_max_dist, spatial_pos_max=self.spatial_pos_max),)
+        # for batch in loader:
+        #     print(batch)
+        return loader
+
+    def val_dataloader(self):
+        print('pretrain validation loader here')
+        loader = DataLoader(self.val_set, batch_size=self.batch_size, collate_fn=partial(collator, max_node=38, multi_hop_max_dist=self.multi_hop_max_dist, spatial_pos_max=self.spatial_pos_max),)
+        return loader
+
+        # # test set
+        # smi = 'C1(=CC=CC(=C1)C(CC)C)O'
+        # data1 = smiles2graph(2, smi)
+        # smi = 'CC1=C(C=C(C=C1)NC(=O)C2=CC=C(C=C2)CN3CCN(CC3)C)NC4=NC=CC(=N4)C5=CN=CC=C5'
+        # data2 = smiles2graph(2, smi)
+        # smi = 'C1=CC=CC(=C1)C(CC)C'
+        # data3 = smiles2graph(2, smi)
+        # dataset = [data1, data2, data3]
+        #
+        # self.test_set = dataset
