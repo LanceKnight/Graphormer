@@ -3,7 +3,7 @@
 
 from model import Graphormer, SelfSupervisedGraphormer
 from data import GraphDataModule, get_dataset, AugmentedDataModule
-from monitors import LogAUCMonitor, LossMonitor, PPVMonitor
+from monitors import LogAUCMonitor, LossMonitor, PPVMonitor, LossNoDropoutMonitor, LogAUCNoDropoutMonitor
 
 from argparse import ArgumentParser
 from pprint import pprint
@@ -69,26 +69,26 @@ def cli_main(logger):
     # ------------
     # pretraining
     # ------------
-    pretrain_dirpath = args.pretrain_model_dir
-    pretrain_checkpoint_callback = ModelCheckpoint(
-        # monitor=metric,
-        dirpath= pretrain_dirpath,
-        filename=dm.dataset_name + '-{epoch:03d}-{' + metric + ':.4f}',
-        # save_top_k=100,
-        # mode=get_dataset(dm.dataset_name)['metric_mode'],
-        save_last=True,
-    )
-    if os.path.exists(pretrain_dirpath+'/last.ckpt'):
-        print(f'\npretraining checkpoint exists, resuming checkpoint')
-        args.resume_from_checkpoint =    pretrain_dirpath + '/last.ckpt'
-        print('pretraining args.resume_from_checkpoint', args.resume_from_checkpoint)
-
-    self_supervised_trainer = pl.Trainer.from_argparse_args(args)
-    self_supervised_trainer.callbacks.append(pretrain_checkpoint_callback)
-    self_supervised_trainer.callbacks.append(LossMonitor(stage='train', logger=logger, logging_interval='step', title='pretrain_'))
-    self_supervised_trainer.callbacks.append(LossMonitor(stage='train', logger=logger, logging_interval='epoch', title='pretrain_'))
-    self_supervised_trainer.callbacks.append(LearningRateMonitor(logging_interval='step'))
-    self_supervised_trainer.fit(pretrain_model, augmented_dataset)
+    # pretrain_dirpath = args.pretrain_model_dir
+    # pretrain_checkpoint_callback = ModelCheckpoint(
+    #     # monitor=metric,
+    #     dirpath= pretrain_dirpath,
+    #     filename=dm.dataset_name + '-{epoch:03d}-{' + metric + ':.4f}',
+    #     # save_top_k=100,
+    #     # mode=get_dataset(dm.dataset_name)['metric_mode'],
+    #     save_last=True,
+    # )
+    # if os.path.exists(pretrain_dirpath+'/last.ckpt'):
+    #     print(f'\npretraining checkpoint exists, resuming checkpoint')
+    #     args.resume_from_checkpoint =    pretrain_dirpath + '/last.ckpt'
+    #     print('pretraining args.resume_from_checkpoint', args.resume_from_checkpoint)
+    #
+    # self_supervised_trainer = pl.Trainer.from_argparse_args(args)
+    # self_supervised_trainer.callbacks.append(pretrain_checkpoint_callback)
+    # self_supervised_trainer.callbacks.append(LossMonitor(stage='train', logger=logger, logging_interval='step', title='pretrain_'))
+    # self_supervised_trainer.callbacks.append(LossMonitor(stage='train', logger=logger, logging_interval='epoch', title='pretrain_'))
+    # self_supervised_trainer.callbacks.append(LearningRateMonitor(logging_interval='step'))
+    # self_supervised_trainer.fit(pretrain_model, augmented_dataset)
 
     # ------------
     # actual training
@@ -183,8 +183,13 @@ def cli_main(logger):
     trainer = pl.Trainer.from_argparse_args(args)
     trainer.callbacks.append(checkpoint_callback)
     trainer.callbacks.append(LossMonitor(stage='train', logger=logger, logging_interval='step'))
+
     trainer.callbacks.append(LossMonitor(stage='train', logger=logger, logging_interval='epoch'))
     trainer.callbacks.append(LogAUCMonitor(stage='train', logger=logger, logging_interval='epoch'))
+    trainer.callbacks.append(LossNoDropoutMonitor(stage='train', logger=logger, logging_interval='step'))
+    trainer.callbacks.append(LossNoDropoutMonitor(stage='train', logger=logger, logging_interval='epoch'))
+    trainer.callbacks.append(LogAUCNoDropoutMonitor(stage='train', logger=logger, logging_interval='step'))
+    trainer.callbacks.append(LogAUCNoDropoutMonitor(stage='train', logger=logger, logging_interval='epoch'))
     trainer.callbacks.append(PPVMonitor(stage='train', logger=logger, logging_interval='epoch'))
     trainer.callbacks.append(LogAUCMonitor(stage='valid',logger=logger, logging_interval='epoch'))
     trainer.callbacks.append(PPVMonitor(stage='valid',logger=logger, logging_interval='epoch'))
@@ -192,6 +197,7 @@ def cli_main(logger):
     trainer.callbacks.append(LossMonitor(stage='valid', logger=logger, logging_interval='epoch'))
     # trainer.callbacks.append(LogAUCMonitor(stage='train', logger=logger, logging_interval='step'))
     trainer.callbacks.append(LearningRateMonitor(logging_interval='step'))
+    trainer.callbacks.append(LearningRateMonitor(logging_interval='epoch'))
 
 
     if args.test:

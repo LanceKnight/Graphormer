@@ -194,63 +194,31 @@ class Graphormer(pl.LightningModule):
             output = self.downstream_out_proj(output[:, 0, :])
 
         return output, graph_embedding
-
+    # graphomer
     def training_step(self, batched_data, batch_idx):
         print(f'\n actual training running')
-        if self.dataset_name == 'ogbg-molpcba':
-            if not self.flag:
-                y_pred = self(batched_data).view(-1)
-                y_true = batched_data.y.view(-1).float()
-                mask = ~torch.isnan(y_true)
-                loss = self.loss_fn(y_pred[mask], y_true[mask])
-            else:
-                y_true = batched_data.y.view(-1).float()
-                mask = ~torch.isnan(y_true)
 
-                def forward(perturb): return self(batched_data, perturb)
-                model_forward = (self, forward)
-                n_graph, n_node = batched_data.x.size()[:2]
-                perturb_shape = (n_graph, n_node, self.hidden_dim)
+        output = self(batched_data)
+        y_pred, emb = output[0].view(-1), output[1]
+        y_pred_numpy = y_pred.detach().cpu().numpy()
+        y_true = batched_data.y.view(-1)
+        y_true_numpy = y_true.cpu().numpy()
 
-                optimizer = self.optimizers()
-                optimizer.zero_grad()
-                loss, _ = flag_bounded(model_forward, perturb_shape, y_true[mask], optimizer, batched_data.x.device, self.loss_fn,
-                                       m=self.flag_m, step_size=self.flag_step_size, mag=self.flag_mag, mask=mask)
-                self.lr_schedulers().step()
-
-        elif self.dataset_name == 'ogbg-molhiv':
-            if not self.flag:
-                y_pred = self(batched_data).view(-1)
-                y_true = batched_data.y.view(-1).float()
-                loss = self.loss_fn(y_pred, y_true)
-            else:
-                y_true = batched_data.y.view(-1).float()
-                def forward(perturb): return self(batched_data, perturb)
-                model_forward = (self, forward)
-                n_graph, n_node = batched_data.x.size()[:2]
-                perturb_shape = (n_graph, n_node, self.hidden_dim)
-
-                optimizer = self.optimizers()
-                optimizer.zero_grad()
-                loss, _ = flag_bounded(model_forward, perturb_shape, y_true, optimizer, batched_data.x.device, self.loss_fn,
-                                       m=self.flag_m, step_size=self.flag_step_size, mag=self.flag_mag)
-                self.lr_schedulers().step()
-        else:
-            output = self(batched_data)
-            y_pred, emb = output[0].view(-1), output[1]
-            y_pred_numpy = y_pred.detach().cpu().numpy()
-            y_true = batched_data.y.view(-1)
-            y_true_numpy = y_true.cpu().numpy()
-
-            # y_pred = self(batched_data).detach()
-            y_true = batched_data.y
-            # print(f'y_pred:{y_pred} y_true:{y_true}')
-            loss = self.loss_fn(y_pred, y_true.float())
+        # y_pred = self(batched_data).detach()
+        y_true = batched_data.y
+        # print(f'y_pred:{y_pred} y_true:{y_true}')
+        loss = self.loss_fn(y_pred, y_true.float())
         # self.log('train_loss', loss)
 
         logAUC = calculate_logAUC(y_true_numpy, y_pred_numpy, FPR_range=logAUC_range)
-        return {"loss": loss, "logAUC": logAUC, "y_pred": y_pred_numpy, "y_true": y_true_numpy}
-
+        self.eval()
+        output_no_dropout = self(batched_data)
+        y_pred_no_dropout, _ = output_no_dropout[0].view(-1), output[1]
+        loss_no_dropout = self.loss_fn(y_pred_no_dropout, y_true.float())
+        logAUC_no_dropout = calculate_logAUC(y_true_numpy, y_pred_numpy, FPR_range=logAUC_range)
+        self.train()
+        return {"loss": loss, "logAUC": logAUC, "y_pred": y_pred_numpy, "y_true": y_true_numpy, "loss_no_dropout":loss_no_dropout, "logAUC_no_dropout":logAUC_no_dropout}
+    # graphomer
     def training_epoch_end(self, outputs: List[Dict]) -> None:
         epoch_outputs = {}
         y_pred = []
@@ -272,7 +240,7 @@ class Graphormer(pl.LightningModule):
         epoch_outputs['logAUC'] = logAUC
         epoch_outputs['ppv'] = ppv
         self.train_epoch_outputs = epoch_outputs
-
+    # graphomer
     def validation_step(self, batched_data, batch_idx):
         print(f'\nactual validation step running')
         if self.dataset_name in ['PCQM4M-LSC', 'ZINC']:
@@ -294,42 +262,39 @@ class Graphormer(pl.LightningModule):
         }
 
         # return {"logAUC":15}
-
+    # graphomer
     def validation_epoch_end(self, outputs):
         print(f'\nvalidation step finishing')
         # print(f'model output:{outputs}')
         y_pred = torch.cat([output['y_pred'] for output in outputs])
         y_true = torch.cat([i['y_true'] for i in outputs])
-        if self.dataset_name == 'ogbg-molpcba':
-            mask = ~torch.isnan(y_true)
-            loss = self.loss_fn(y_pred[mask], y_true[mask])
-            self.log('valid_ap', loss, sync_dist=True)
-        else:
-            input_dict = {"y_true": y_true, "y_pred": y_pred}
-            try:
-                # print(f'evaluator:{self.evaluator.eval(input_dict)}')
-                # print(f'valid_{self.metric}  self.self.evaluator.eval(input_dict){self.evaluator.eval(input_dict)[self.metric]}')
-                self.log('valid_' + self.metric, self.evaluator.eval(input_dict)
-                         [self.metric], sync_dist=True)
 
-            except:
-                pass
+        input_dict = {"y_true": y_true, "y_pred": y_pred}
+        try:
+            # print(f'evaluator:{self.evaluator.eval(input_dict)}')
+            # print(f'valid_{self.metric}  self.self.evaluator.eval(input_dict){self.evaluator.eval(input_dict)[self.metric]}')
+            self.log('valid_' + self.metric, self.evaluator.eval(input_dict)
+                     [self.metric], sync_dist=True)
 
-            # print(f'input_dict:{input_dict["y_true"]}')
-            # input_dict['y_true'][0] = 0
-            # print(f'valid epoch end y-true:\n{input_dict["y_true"].cpu().numpy()}\ny-pred:\n{input_dict["y_pred"]})')
+        except:
+            pass
 
-            accumulate_logAUC = 0
-            # num_samples = len(input_dict['y_true'])
-            mean_loss = sum(output['loss'] for output in outputs) / len(outputs)
+        # print(f'input_dict:{input_dict["y_true"]}')
+        # input_dict['y_true'][0] = 0
+        # print(f'valid epoch end y-true:\n{input_dict["y_true"].cpu().numpy()}\ny-pred:\n{input_dict["y_pred"]})')
 
-            logAUC = calculate_logAUC(input_dict['y_true'].cpu().numpy(), input_dict['y_pred'].cpu().numpy(), FPR_range=logAUC_range)
-            ppv = calculate_ppv(input_dict['y_true'].cpu().numpy(), input_dict['y_pred'].cpu().numpy())
-            #     accumulate_logAUC += logAUC
-            # logAUC = accumulate_logAUC / num_samples
-            # print(f'logAUC:{logAUC} ppv:{ppv}')
-            self.valid_epoch_outputs = {"logAUC": logAUC, "ppv": ppv, "loss": mean_loss}  # self.evaluator.eval(input_dict)
+        accumulate_logAUC = 0
+        # num_samples = len(input_dict['y_true'])
+        mean_loss = sum(output['loss'] for output in outputs) / len(outputs)
 
+        logAUC = calculate_logAUC(input_dict['y_true'].cpu().numpy(), input_dict['y_pred'].cpu().numpy(), FPR_range=logAUC_range)
+        ppv = calculate_ppv(input_dict['y_true'].cpu().numpy(), input_dict['y_pred'].cpu().numpy())
+        #     accumulate_logAUC += logAUC
+        # logAUC = accumulate_logAUC / num_samples
+        # print(f'logAUC:{logAUC} ppv:{ppv}')
+        self.valid_epoch_outputs = {"logAUC": logAUC, "ppv": ppv, "loss": mean_loss}  # self.evaluator.eval(input_dict)
+
+    # graphomer
     def test_step(self, batched_data, batch_idx):
         if self.dataset_name in ['PCQM4M-LSC', 'ZINC']:
             y_pred = self(batched_data).view(-1)
