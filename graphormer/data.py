@@ -25,55 +25,55 @@ def get_dataset(dataset_name='abaaba'):
         return dataset
 
     # max_node is set to max(max(num_val_graph_nodes), max(num_test_graph_nodes))
-    if dataset_name == 'ogbg-molpcba':
-        dataset = {
-            'num_class': 128,
-            'loss_fn': F.binary_cross_entropy_with_logits,
-            'metric': 'ap',
-            'metric_mode': 'max',
-            'evaluator': ogb.graphproppred.Evaluator('ogbg-molpcba'),
-            'dataset': MyGraphPropPredDataset('ogbg-molpcba', root='../../dataset'),
-            'max_node': 128,
-        }
-    elif dataset_name == 'ogbg-molhiv':
-        dataset = {
-            'num_class': 1,
-            'loss_fn': F.binary_cross_entropy_with_logits,
-            'metric': 'rocauc',
-            'metric_mode': 'max',
-            'evaluator': ogb.graphproppred.Evaluator('ogbg-molhiv'),
-            'dataset': MyGraphPropPredDataset('ogbg-molhiv', root='../../dataset'),
-            'max_node': 128,
-        }
-    elif dataset_name == 'PCQM4M-LSC':
-        dataset = {
-            'num_class': 1,
-            'loss_fn': F.l1_loss,
-            'metric': 'mae',
-            'metric_mode': 'min',
-            'evaluator': ogb.lsc.PCQM4MEvaluator(),
-            'dataset': MyPygPCQM4MDataset(root='../../dataset')[:1000],
-            'max_node': 128,
-        }
-    elif dataset_name == 'ZINC':
-        dataset = {
-            'num_class': 1,
-            'loss_fn': F.l1_loss,
-            'metric': 'mae',
-            'metric_mode': 'min',
-            'evaluator': ogb.lsc.PCQM4MEvaluator(),  # same objective function, so reuse it
-            'train_dataset': MyZINCDataset(subset=True, root='../../dataset/pyg_zinc', split='train'),
-            'valid_dataset': MyZINCDataset(subset=True, root='../../dataset/pyg_zinc', split='val'),
-            'test_dataset': MyZINCDataset(subset=True, root='../../dataset/pyg_zinc', split='test'),
-            'max_node': 128,
-        }
-    elif dataset_name in ['435008', '1798', '435034']:
+    # if dataset_name == 'ogbg-molpcba':
+    #     dataset = {
+    #         'num_class': 128,
+    #         'loss_fn': F.binary_cross_entropy_with_logits,
+    #         'metric': 'ap',
+    #         'metric_mode': 'max',
+    #         'evaluator': ogb.graphproppred.Evaluator('ogbg-molpcba'),
+    #         'dataset': MyGraphPropPredDataset('ogbg-molpcba', root='../../dataset'),
+    #         'max_node': 128,
+    #     }
+    # elif dataset_name == 'ogbg-molhiv':
+    #     dataset = {
+    #         'num_class': 1,
+    #         'loss_fn': F.binary_cross_entropy_with_logits,
+    #         'metric': 'rocauc',
+    #         'metric_mode': 'max',
+    #         'evaluator': ogb.graphproppred.Evaluator('ogbg-molhiv'),
+    #         'dataset': MyGraphPropPredDataset('ogbg-molhiv', root='../../dataset'),
+    #         'max_node': 128,
+    #     }
+    # elif dataset_name == 'PCQM4M-LSC':
+    #     dataset = {
+    #         'num_class': 1,
+    #         'loss_fn': F.l1_loss,
+    #         'metric': 'mae',
+    #         'metric_mode': 'min',
+    #         'evaluator': ogb.lsc.PCQM4MEvaluator(),
+    #         'dataset': MyPygPCQM4MDataset(root='../../dataset')[:1000],
+    #         'max_node': 128,
+    #     }
+    # elif dataset_name == 'ZINC':
+    #     dataset = {
+    #         'num_class': 1,
+    #         'loss_fn': F.l1_loss,
+    #         'metric': 'mae',
+    #         'metric_mode': 'min',
+    #         'evaluator': ogb.lsc.PCQM4MEvaluator(),  # same objective function, so reuse it
+    #         'train_dataset': MyZINCDataset(subset=True, root='../../dataset/pyg_zinc', split='train'),
+    #         'valid_dataset': MyZINCDataset(subset=True, root='../../dataset/pyg_zinc', split='val'),
+    #         'test_dataset': MyZINCDataset(subset=True, root='../../dataset/pyg_zinc', split='test'),
+    #         'max_node': 128,
+    #     }
+    if dataset_name in ['435008', '1798', '435034']:
         dataset = {
             'num_class': 1,
             'loss_fn': BCEWithLogitsLoss(),
             'metric': 'LogAUC',
-            'metric_mode': 'min',
-            'evaluator': ogb.lsc.PCQM4MEvaluator(),  # same objective function, so reuse it
+            # 'metric_mode': 'min',
+            # 'evaluator': ogb.lsc.PCQM4MEvaluator(),  # same objective function, so reuse it
             'dataset': MyQSARDataset(root='../../dataset/qsar', dataset=dataset_name),
             'num_samples': len(MyQSARDataset(root='../../dataset/qsar', dataset=dataset_name)),
             'max_node':512
@@ -88,7 +88,7 @@ def get_dataset(dataset_name='abaaba'):
     print(f' > dataset info ends')
     return dataset
 
-
+# graph dataset
 class GraphDataModule(LightningDataModule):
     name = "OGB-GRAPH"
 
@@ -155,7 +155,7 @@ class GraphDataModule(LightningDataModule):
         return loader
 
     def val_dataloader(self):
-        loader = DataLoader(
+        val_loader = DataLoader(
             self.dataset_val,
             batch_size=self.batch_size,
             shuffle=False,
@@ -164,10 +164,18 @@ class GraphDataModule(LightningDataModule):
             collate_fn=partial(collator, max_node=get_dataset(self.dataset_name)[
                                'max_node'], multi_hop_max_dist=self.multi_hop_max_dist, spatial_pos_max=self.spatial_pos_max),
         )
-        print('len(val_dataloader)', len(loader))
-        # for batch in loader:
-        #     print(batch.y)
-        return loader
+        print('len(val_dataloader)', len(val_loader))
+        train_loader = DataLoader(
+            self.dataset_train,
+            batch_size=self.batch_size,
+            shuffle=True,
+            # sampler= train_sampler,
+            num_workers=self.num_workers,
+            pin_memory=True,
+            collate_fn=partial(collator, max_node=get_dataset(self.dataset_name)[
+                'max_node'], multi_hop_max_dist=self.multi_hop_max_dist, spatial_pos_max=self.spatial_pos_max),
+        )
+        return val_loader,train_loader
 
     def test_dataloader(self):
         loader = DataLoader(
@@ -219,8 +227,8 @@ class AugmentedDataModule(LightningDataModule):
 
     def val_dataloader(self):
         print('pretrain validation loader here')
-        loader = DataLoader(self.val_set, batch_size=self.batch_size, collate_fn=partial(collator, max_node=38, multi_hop_max_dist=self.multi_hop_max_dist, spatial_pos_max=self.spatial_pos_max),)
-        return loader
+        val_loader = DataLoader(self.val_set, batch_size=self.batch_size, collate_fn=partial(collator, max_node=38, multi_hop_max_dist=self.multi_hop_max_dist, spatial_pos_max=self.spatial_pos_max),)
+        return val_loader
 
         # # test set
         # smi = 'C1(=CC=CC(=C1)C(CC)C)O'

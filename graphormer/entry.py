@@ -3,7 +3,7 @@
 
 from model import Graphormer, SelfSupervisedGraphormer
 from data import GraphDataModule, get_dataset, AugmentedDataModule
-from monitors import LogAUCMonitor, LossMonitor, PPVMonitor, LossNoDropoutMonitor, LogAUCNoDropoutMonitor
+from monitors import LogAUCMonitor, LossMonitor, PPVMonitor, LossNoDropoutMonitor, LogAUCNoDropoutMonitor, PPVNoDropoutMonitor
 
 from argparse import ArgumentParser
 from pprint import pprint
@@ -183,19 +183,18 @@ def cli_main(logger):
     trainer = pl.Trainer.from_argparse_args(args)
     trainer.callbacks.append(checkpoint_callback)
     trainer.callbacks.append(LossMonitor(stage='train', logger=logger, logging_interval='step'))
-
     trainer.callbacks.append(LossMonitor(stage='train', logger=logger, logging_interval='epoch'))
-    trainer.callbacks.append(LogAUCMonitor(stage='train', logger=logger, logging_interval='epoch'))
-    trainer.callbacks.append(LossNoDropoutMonitor(stage='train', logger=logger, logging_interval='step'))
-    trainer.callbacks.append(LossNoDropoutMonitor(stage='train', logger=logger, logging_interval='epoch'))
-    trainer.callbacks.append(LogAUCNoDropoutMonitor(stage='train', logger=logger, logging_interval='step'))
-    trainer.callbacks.append(LogAUCNoDropoutMonitor(stage='train', logger=logger, logging_interval='epoch'))
-    trainer.callbacks.append(PPVMonitor(stage='train', logger=logger, logging_interval='epoch'))
-    trainer.callbacks.append(LogAUCMonitor(stage='valid',logger=logger, logging_interval='epoch'))
-    trainer.callbacks.append(PPVMonitor(stage='valid',logger=logger, logging_interval='epoch'))
+    # trainer.callbacks.append(LogAUCMonitor(stage='train', logger=logger, logging_interval='epoch'))
+    # trainer.callbacks.append(PPVMonitor(stage='train', logger=logger, logging_interval='epoch'))
+
     trainer.callbacks.append(LossMonitor(stage='valid', logger=logger, logging_interval='step'))
     trainer.callbacks.append(LossMonitor(stage='valid', logger=logger, logging_interval='epoch'))
-    # trainer.callbacks.append(LogAUCMonitor(stage='train', logger=logger, logging_interval='step'))
+    # trainer.callbacks.append(LogAUCMonitor(stage='valid',logger=logger, logging_interval='epoch'))
+    # trainer.callbacks.append(PPVMonitor(stage='valid',logger=logger, logging_interval='epoch'))
+    trainer.callbacks.append(LossNoDropoutMonitor(stage='valid', logger=logger, logging_interval='epoch'))
+    # trainer.callbacks.append(LogAUCNoDropoutMonitor(stage='valid', logger=logger, logging_interval='epoch'))
+    # trainer.callbacks.append(PPVNoDropoutMonitor(stage='valid', logger=logger, logging_interval='epoch'))
+
     trainer.callbacks.append(LearningRateMonitor(logging_interval='step'))
     trainer.callbacks.append(LearningRateMonitor(logging_interval='epoch'))
 
@@ -213,7 +212,7 @@ def cli_main(logger):
         trainer.fit(model, datamodule=dm)
 
 
-task = Task.init(project_name="Tests/Graphormer", task_name="pretrain test", tags=["graphormer", "experiment", "qsar","pretrain"])
+task = Task.init(project_name="Tests/Graphormer", task_name="pretrain test", tags=["graphormer", "debug", "qsar","pretrain"])
 
 if __name__ == '__main__':
     logger = task.get_logger()
