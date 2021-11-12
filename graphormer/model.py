@@ -196,160 +196,95 @@ class Graphormer(pl.LightningModule):
         return output, graph_embedding
     # graphomer
     def training_step(self, batched_data, batch_idx):
-        print(f'\n actual training running')
+        # print(f'\n actual training running')
 
         output = self(batched_data)
         y_pred, emb = output[0].view(-1), output[1]
-        y_pred_numpy = y_pred.detach().cpu().numpy()
         y_true = batched_data.y.view(-1)
-        y_true_numpy = y_true.cpu().numpy()
-
-        # y_pred = self(batched_data).detach()
-        y_true = batched_data.y
-        # print(f'y_pred:{y_pred} y_true:{y_true}')
 
         num_pos = sum(y_true).item()
         num_neg = len(y_true) - num_pos
-        pos_weight = torch.where(y_true>0, num_pos, num_neg)
-        self.loss_fn = nn.BCEWithLogitsLoss(pos_weight = pos_weight)
-        loss = self.loss_fn(y_pred, y_true.float())
-        # self.log('train_loss', loss)
+        # if(num_pos == 0):
+        #     print(f'batched_data:{batched_data}')
+        pos_weight = torch.where(y_true > 0, num_neg, num_pos)
+        self.loss_fn = nn.BCEWithLogitsLoss()  # pos_weight = pos_weight)
+        loss = self.loss_fn(y_pred, y_true)
 
-        # logAUC = calculate_logAUC(y_true_numpy, y_pred_numpy, FPR_range=logAUC_range)
-        torch.cuda.empty_cache()
-        self.eval()
-        output_no_dropout = self(batched_data)
-        y_pred_no_dropout, _ = output_no_dropout[0].view(-1), output[1]
-        loss_no_dropout = self.loss_fn(y_pred_no_dropout, y_true.float())
-        # logAUC_no_dropout = calculate_logAUC(y_true_numpy, y_pred_no_dropout.detach().cpu().numpy(), FPR_range=logAUC_range)
-        self.train()
-        # return {"loss": loss, "logAUC": logAUC, "y_pred": y_pred_numpy, "y_pred_no_dropout":y_pred_no_dropout.detach().cpu().numpy(), "y_true": y_true_numpy, "loss_no_dropout":loss_no_dropout}#, "logAUC_no_dropout":logAUC_no_dropout
-        print(f'training steps={self.global_step} epoch:{self.current_epoch} id:{batch_idx} loss:{loss}')
-        return {"loss": loss, "y_pred": y_pred_numpy, "y_true": y_true_numpy}#"logAUC_no_dropout":logAUC_no_dropout,, "loss_no_dropout":loss_no_dropout
-    # graphomer
-    # def training_epoch_end(self, outputs: List[Dict]) -> None:
-    #     epoch_outputs = {}
-    #     y_pred = []
-    #     y_true = []
-    #     # print(f'len output:{len(outputs)}')
-    #     for key in outputs[0].keys():
-    #         if (key != 'y_pred') and (key != 'y_true') and (key!='y_pred_no_dropout'):
-    #             mean_output = sum(output[key] for output in outputs) / len(outputs)
-    #             epoch_outputs[key] = mean_output
-    #
-    #     y_pred = np.concatenate([i['y_pred'] for i in outputs])
-    #     y_pred_no_dropout = np.concatenate([i['y_pred_no_dropout'] for i in outputs])
-    #     y_true = np.concatenate([i['y_true'] for i in outputs])
-    #
-    #     input_dict = {"y_true": y_true, "y_pred": y_pred, 'y_pred_no_dropout':y_pred_no_dropout}
-    #
-    #     # print(f'end: y_pred:{y_pred}, y_true:{y_true}')
-    #     logAUC = calculate_logAUC(input_dict['y_true'], input_dict['y_pred'], FPR_range=logAUC_range)
-    #     logAUC_no_dropout = calculate_logAUC(input_dict['y_true'], input_dict['y_pred_no_dropout'], FPR_range=logAUC_range)
-    #     ppv = calculate_ppv(input_dict['y_true'], input_dict['y_pred'])
-    #     ppv_no_dropout = calculate_ppv(input_dict['y_true'], input_dict['y_pred_no_dropout'])
-    #
-    #     epoch_outputs['logAUC'] = logAUC
-    #     epoch_outputs['ppv'] = ppv
-    #     epoch_outputs['logAUC_no_dropout'] = logAUC_no_dropout
-    #     epoch_outputs['ppv_no_dropout'] = ppv_no_dropout
-    #     self.train_epoch_outputs = epoch_outputs
-    def training_epoch_end(self, outputs: List[Dict]) -> None:
+        print(f'training_steop: steps={self.global_step} epoch={self.current_epoch} batch_id={batch_idx} loss={loss}')
+        return {"loss": loss, "y_pred": y_pred, "y_true": y_true}
+
+    def training_epoch_end(self, outputs):
         epoch_outputs = {}
-        y_pred = []
-        y_true = []
-        # print(f'len output:{len(outputs)}')
-        for key in outputs[0].keys():
-            if (key != 'y_pred') and (key != 'y_true') :
-                mean_output = sum(output[key] for output in outputs) / len(outputs)
-                epoch_outputs[key] = mean_output
 
-        y_pred = np.concatenate([i['y_pred'] for i in outputs])
-        # y_pred_no_dropout = np.concatenate([i['y_pred_no_dropout'] for i in outputs])
-        y_true = np.concatenate([i['y_true'] for i in outputs])
+        y_pred = torch.cat([i['y_pred'] for i in outputs])
+        y_true = torch.cat([i['y_true'] for i in outputs])
 
-        input_dict = {"y_true": y_true, "y_pred": y_pred}
+        num_pos = sum(y_true).item()
+        num_neg = len(y_true) - num_pos
 
-        # print(f'end: y_pred:{y_pred}, y_true:{y_true}')
-        logAUC = calculate_logAUC(input_dict['y_true'], input_dict['y_pred'], FPR_range=logAUC_range)
-        # logAUC_no_dropout = calculate_logAUC(input_dict['y_true'], input_dict['y_pred_no_dropout'], FPR_range=logAUC_range)
-        ppv = calculate_ppv(input_dict['y_true'], input_dict['y_pred'])
-        # ppv_no_dropout = calculate_ppv(input_dict['y_true'], input_dict['y_pred_no_dropout'])
+        pos_weight = torch.where(y_true > 0, num_neg, num_pos)
+        self.loss_fn = nn.BCEWithLogitsLoss()  # pos_weight = pos_weight)
+        loss = self.loss_fn(y_pred, y_true)
+        y_true_numpy = y_true.detach().cpu().numpy()
+        y_pred_numpy = y_pred.detach().cpu().numpy()
+        logAUC = calculate_logAUC(y_true_numpy, y_pred_numpy, FPR_range=logAUC_range)
+        # ppv = calculate_ppv(y_true_numpy, y_pred_numpy)
 
+        epoch_outputs['loss'] = loss
         epoch_outputs['logAUC'] = logAUC
-        epoch_outputs['ppv'] = ppv
-        print(f'training steps={self.global_step} epoch:{self.current_epoch} logAUC:{logAUC} PPV:{ppv} ')
-        # epoch_outputs['logAUC_no_dropout'] = logAUC_no_dropout
-        # epoch_outputs['ppv_no_dropout'] = ppv_no_dropout
+        # epoch_outputs['ppv'] = ppv
+        # print(f'training_epoch_end: steps={self.global_step} epoch={self.current_epoch} loss={loss} logAUC={logAUC} PPV={ppv} ')
         self.train_epoch_outputs = epoch_outputs
 
-
-    # graphomer
     def validation_step(self, batched_data, batch_idx, dataloader_ix):
         print(f'\nactual validation step running')
 
-
         output = self(batched_data)
         y_pred, emb = output[0].view(-1), output[1]
         y_true = batched_data.y.view(-1)
-        # print(f'y_pred.shape:{y_pred.shape} y_true:{y_true.shape}')
 
         num_pos = sum(y_true).item()
         num_neg = len(y_true) - num_pos
-        pos_weight = torch.where(y_true > 0, num_pos, num_neg)
+        pos_weight = torch.where(y_true > 0, num_neg, num_pos)
+        self.loss_fn = nn.BCEWithLogitsLoss()  # pos_weight=pos_weight)
+        loss = self.loss_fn(y_pred, y_true)
 
-        self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
-        loss = self.loss_fn(y_pred, y_true.float())
-
-        print(f'valid dataloader_ix:{dataloader_ix} batched_idx:{batch_idx} steps={self.global_step} epoch:{self.current_epoch} loss:{loss} ')
+        print(
+            f'validation_step: valid dataloader_ix={dataloader_ix} steps={self.global_step} epoch={self.current_epoch} batched_idx={batch_idx} loss={loss} ')
         return {
             'y_pred': y_pred,
             'y_true': y_true,
-            'loss':loss,
-            'emb':emb
         }
 
-        # return {"logAUC":15}
-    # graphomer
+        # graphomer
+
     def validation_epoch_end(self, outputs):
-        print(f'\nvalidation step finishing')
 
         for i, outputs_each_dataloader in enumerate(outputs):
             y_pred = torch.cat([output['y_pred'] for output in outputs_each_dataloader])
             y_true = torch.cat([i['y_true'] for i in outputs_each_dataloader])
 
-            input_dict = {"y_true": y_true, "y_pred": y_pred}
-            mean_loss = sum(output['loss'] for output in outputs_each_dataloader) / len(outputs_each_dataloader)
-            # try:
-            #     # print(f'evaluator:{self.evaluator.eval(input_dict)}')
-            #     # print(f'valid_{self.metric}  self.self.evaluator.eval(input_dict){self.evaluator.eval(input_dict)[self.metric]}')
-            #     self.log('valid_' + self.metric, self.evaluator.eval(input_dict)
-            #              [self.metric], sync_dist=True)
-            #
-            # except:
-            #     pass
+            num_pos = sum(y_true).item()
+            num_neg = len(y_true) - num_pos
+            pos_weight = torch.where(y_true > 0, num_neg, num_pos)
+            self.loss_fn = nn.BCEWithLogitsLoss()  # pos_weight=pos_weight)
+            loss = self.loss_fn(y_pred, y_true)
+            y_true_numpy = y_true.detach().cpu().numpy()
+            y_pred_numpy = y_pred.detach().cpu().numpy()
+            logAUC = calculate_logAUC(y_true_numpy, y_pred_numpy, FPR_range=logAUC_range)
+            # ppv = calculate_ppv(y_true_numpy, y_pred_numpy)
 
-            # print(f'input_dict:{input_dict["y_true"]}')
-            # input_dict['y_true'][0] = 0
-            # print(f'valid epoch end y-true:\n{input_dict["y_true"].cpu().numpy()}\ny-pred:\n{input_dict["y_pred"]})')
-
-            accumulate_logAUC = 0
-            # num_samples = len(input_dict['y_true'])
-
-
-            logAUC = calculate_logAUC(input_dict['y_true'].cpu().numpy(), input_dict['y_pred'].cpu().numpy(), FPR_range=logAUC_range)
-            ppv = calculate_ppv(input_dict['y_true'].cpu().numpy(), input_dict['y_pred'].cpu().numpy())
-        #     accumulate_logAUC += logAUC
-        # logAUC = accumulate_logAUC / num_samples
-        # print(f'logAUC:{logAUC} ppv:{ppv}')
-            if i ==0:
-                # print(f'val: y_true:{y_true}\n y_pred:{y_pred}')
-                self.valid_epoch_outputs = {"logAUC": logAUC, "ppv": ppv, "loss": mean_loss}  # self.evaluator.eval(input_dict)
+            if i == 0:
+                print(
+                    f'validation_epoch_end: valid dataloader_ix={i} steps={self.global_step} epoch={self.current_epoch} loss={loss} logAUC={logAUC} ')
+                self.valid_epoch_outputs = {"logAUC": logAUC, "loss": loss}  # self.evaluator.eval(input_dict)
             else:
-                # print(f'no dropout: y_true:{y_true}\n y_pred:{y_pred}')
-                self.valid_epoch_outputs["logAUC_no_dropout"]= logAUC
-                self.valid_epoch_outputs["ppv_no_dropout"] = ppv
-                self.valid_epoch_outputs["loss_no_dropout"] = mean_loss
+                print(
+                    f'validation_epoch_end: valid dataloader_ix={i} steps={self.global_step} epoch={self.current_epoch} loss_no_dropout={loss} logAUC_dropout={logAUC} ')
+                self.valid_epoch_outputs["logAUC_no_dropout"] = logAUC
+                # self.valid_epoch_outputs["ppv_no_dropout"] = ppv
+                self.valid_epoch_outputs["loss_no_dropout"] = loss
+
     # graphomer
     def test_step(self, batched_data, batch_idx):
         if self.dataset_name in ['PCQM4M-LSC', 'ZINC']:

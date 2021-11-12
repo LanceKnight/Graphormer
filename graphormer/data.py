@@ -175,7 +175,7 @@ class GraphDataModule(LightningDataModule):
             collate_fn=partial(collator, max_node=get_dataset(self.dataset_name)[
                 'max_node'], multi_hop_max_dist=self.multi_hop_max_dist, spatial_pos_max=self.spatial_pos_max),
         )
-        return val_loader,train_loader
+        return val_loader,self.train_dataloader()
 
     def test_dataloader(self):
         loader = DataLoader(
