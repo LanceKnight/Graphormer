@@ -30,6 +30,8 @@ class MetricMonitor(Callback):
             if self.logging_interval == "epoch":
                 outputs = pl_module.train_epoch_outputs
                 series = self.series if self.series is not None else 'train'
+                print(f'self.metric:{self.metric} type:{type(self.metric)}')
+                print(f'outputs:{outputs}')
                 print(f'on_train_epoch_end: title={self.title}, series={series}, value={outputs[self.metric]}, trainer.current_epoch={trainer.current_epoch}')
                 self.logger.report_scalar(title=self.title, series=series, value=outputs[self.metric], iteration=trainer.current_epoch)
 
