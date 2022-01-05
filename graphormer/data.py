@@ -141,31 +141,19 @@ class DataLoaderModule(LightningDataModule):
         return train_loader
 
     def val_dataloader(self):
+        print(f'dataset_train:{self.dataset_train[0]}')
         val_loader = DataLoader(
             self.dataset_val,
-            batch_size=self.batch_size,
-            shuffle=False,
+            batch_size=len(self.dataset_val),
+            shuffle=True,
             num_workers=self.num_workers,
-            pin_memory=False,
-            collate_fn=partial(collator,
-                               max_node=get_dataset(self.dataset_name)[
-                                   'max_node'],
-                               multi_hop_max_dist=self.multi_hop_max_dist,
-                               spatial_pos_max=self.spatial_pos_max),
         )
-        print('len(val_dataloader)', len(val_loader))
+        print(f'dataset_train:{self.dataset_train[0]}')
         train_loader = DataLoader(
             self.dataset_train,
-            batch_size=self.batch_size,
+            batch_size=len(self.dataset_train),
             shuffle=True,
-            # sampler= train_sampler,
             num_workers=self.num_workers,
-            pin_memory=True,
-            collate_fn=partial(collator,
-                               max_node=get_dataset(self.dataset_name)[
-                                   'max_node'],
-                               multi_hop_max_dist=self.multi_hop_max_dist,
-                               spatial_pos_max=self.spatial_pos_max),
         )
         return val_loader, train_loader
 

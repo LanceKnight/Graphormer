@@ -332,7 +332,7 @@ class QSARDataset(InMemoryDataset):
         split_dict['train'] = [torch.tensor(x) for x in range(0, 326)] + [
             torch.tensor(x) for x in range(400, 1074)]  # 1K Training
         split_dict['valid'] = [torch.tensor(x) for x in range(326, 362)] + [
-            torch.tensor(x) for x in range(1100, 2074)]  # 1K val
+            torch.tensor(x) for x in range(1100, 2064)]  # 1K val
         split_dict['test'] = [torch.tensor(x) for x in range(326, 362)] + [
             torch.tensor(x) for x in range(3000, 4000)]
 

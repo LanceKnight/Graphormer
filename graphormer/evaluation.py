@@ -46,7 +46,7 @@ def calculate_logAUC(true_y, predicted_score, FPR_range=(0.001, 0.1)):
         range2 = np.log10(FPR_range[1])
         if (range1 >= range2):
             raise Exception('FPR range2 must be greater than range1')
-    print(f'true_y:{true_y}, predicted_score:{predicted_score}')
+    # print(f'true_y:{true_y}, predicted_score:{predicted_score}')
     fpr, tpr, thresholds = roc_curve(true_y, predicted_score, pos_label=1)
     x = fpr
     y = tpr
