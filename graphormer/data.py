@@ -1,5 +1,5 @@
 from collator import collator
-from wrapper import QSARDataset
+from wrapper import QSARDataset, ToXAndPAndEdgeAttrForDeg
 
 from pytorch_lightning import LightningDataModule
 import torch
@@ -36,6 +36,7 @@ def get_dataset(dataset_name='435034'):
     if dataset_name in ['435008', '1798', '435034']:
         qsar_dataset =QSARDataset(root='../../dataset/qsar',
                                   dataset=dataset_name,
+                                  pre_transform=ToXAndPAndEdgeAttrForDeg(),
                                  )
         dataset = {
             'num_class': 1,

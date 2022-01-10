@@ -1,36 +1,27 @@
 import os
-import pandas as pd
-from rdkit import Chem
-from rdkit.Chem import AllChem
 import torch
-from torch_geometric.data import InMemoryDataset, Data
+# import pickle
+# import collections
+# import math
+import pandas as pd
+# import networkx as nx
+from rdkit import Chem
+# from rdkit.Chem import Descriptors
+from rdkit.Chem import AllChem
+# from rdkit import DataStructs
+from rdkit.Chem.rdMolDescriptors import GetMorganFingerprintAsBitVect
+# from torch.utils import data
+from torch_geometric.data import Data, InMemoryDataset, DataLoader
 from torch_geometric.utils import degree
+# from torch_geometric.data import Batch
+# from itertools import repeat, product, chain
 from tqdm import tqdm
 
-
-
-
-
+# this pattern_dict is used for cleaning some smiles that cannot be processed by rdkit
 pattern_dict = {'[NH-]': '[N-]'}
-add_atom_num = 5
-num_reference = 10000  # number of reference molecules for augmentation
-
-
-def smiles_cleaner(smiles):
-    '''
-    this function is to clean smiles for some known issues that makes
-    rdkit:Chem.MolFromSmiles not working
-    '''
-    print('fixing smiles for rdkit...')
-    new_smiles = smiles
-    for pattern, replace_value in pattern_dict.items():
-        if pattern in smiles:
-            print('found pattern and fixed the smiles!')
-            new_smiles = smiles.replace(pattern, replace_value)
-    return new_smiles
-
 
 def generate_element_rep_list(elements):
+
     print('calculating rdkit element representation lookup table')
     elem_rep_lookup = []
     for elem in elements:
@@ -45,12 +36,12 @@ def generate_element_rep_list(elements):
         w = pt.GetAtomicWeight(elem)
 
         Rvdw = pt.GetRvdw(elem)
-        #     Rcoval = pt.GetRCovalent(elem)
+    #     Rcoval = pt.GetRCovalent(elem)
         valence = pt.GetDefaultValence(elem)
         outer_elec = pt.GetNOuterElecs(elem)
 
         elem_rep = [num, w, Rvdw, valence, outer_elec]
-        #             print(elem_rep)
+#             print(elem_rep)
 
         elem_rep_lookup.append(elem_rep)
     elem_lst = elem_rep_lookup.copy()
@@ -76,15 +67,34 @@ def get_atom_rep(atomic_num):
     return result
 
 
+# def get_atom_rep(atomic_num, package='rdkit'):
+#     '''use rdkit or pymatgen to generate atom representation
+#     '''
+#     global elem_lst
+
+#     if package == 'rdkit':
+#         elem_lst = lookup_from_rdkit(element_nums)
+#     elif package == 'pymatgen':
+#         raise Exception('pymatgen implementation is deprecated.')
+#         # elem_lst = lookup_from_pymatgen(element_nums)
+#     else:
+#         raise Exception('cannot generate atom representation lookup table')
+
+#     result = 0
+#     try:
+#         result = elem_lst[atomic_num - 1]
+#     except:
+#         print(f'error: atomic_num {atomic_num} does not exist')
+
+#     return result
+
+
 def smiles2graph(D, smiles):
     if D == None:
         raise Exception(
-            'smiles2grpah() needs to input D to specifiy 2D or 3D graph '
-            'generation.')
+            'smiles2grpah() needs to input D to specifiy 2D or 3D graph generation.')
     # print(f'smiles:{smiles}')
-    # Default RDKit behavior is to reject hypervalent P, so you need to set
-    # sanitize=False. Search keyword = 'Explicit Valence Error - Partial
-    # Sanitization' on https://www.rdkit.org/docs/Cookbook.html for more info
+    # default RDKit behavior is to reject hypervalent P, so you need to set sanitize=False. Search keyword = 'Explicit Valence Error - Partial Sanitization' on https://www.rdkit.org/docs/Cookbook.html for more info
     smiles = smiles.replace(r'/=', '=')
     smiles = smiles.replace(r'\=', '=')
     try:
@@ -122,8 +132,7 @@ def smiles2graph(D, smiles):
         h = get_atom_rep(atomic_num)
 
         if D == 2:
-            atom_pos.append(
-                [conf.GetAtomPosition(i).x, conf.GetAtomPosition(i).y])
+            atom_pos.append([conf.GetAtomPosition(i).x, conf.GetAtomPosition(i).y])
         elif D == 3:
             atom_pos.append([conf.GetAtomPosition(
                 i).x, conf.GetAtomPosition(i).y, conf.GetAtomPosition(i).z])
@@ -149,65 +158,41 @@ def smiles2graph(D, smiles):
 
         edge_list.append((i, j))
         edge_attr_list.append(bond_attr)
-        #         print(f'i:{i} j:{j} bond_attr:{bond_attr}')
+#         print(f'i:{i} j:{j} bond_attr:{bond_attr}')
 
         edge_list.append((j, i))
         edge_attr_list.append(bond_attr)
-    #         print(f'j:{j} j:{i} bond_attr:{bond_attr}')
+#         print(f'j:{j} j:{i} bond_attr:{bond_attr}')
 
     x = torch.tensor(atom_attr)
     p = torch.tensor(atom_pos)
     edge_index = torch.tensor(edge_list).t().contiguous()
     edge_attr = torch.tensor(edge_attr_list)
 
-    # graphormer-specific features
-    # adj = torch.zeros([N, N], dtype=torch.bool)
-    # adj[edge_index[0, :], edge_index[1, :]] = True
-    # attn_bias = torch.zeros(
-    #     [N + 1, N + 1], dtype=torch.float)  # with graph token
-    # attn_edge_type = torch.zeros([N, N, edge_attr.size(-1)],
-    # dtype=torch.long)
-    # attn_edge_type[edge_index[0, :], edge_index[1, :]
-    #                ] = convert_to_single_emb(edge_attr) + 1
-
-    data = Data(x=x, p=p, edge_index=edge_index,
-                edge_attr=edge_attr)  # , adj=adj, attn_bias=attn_bias,
-    # attn_edge_type=attn_edge_type)
-    # data = preprocess_item(data)
+    data = Data(x=x, p=p, edge_index=edge_index, edge_attr=edge_attr)
     return data
 
 
-def convert_to_single_emb(x, offset=512):
-    feature_num = x.size(1) if len(x.size()) > 1 else 1
-    feature_offset = 1 + \
-                     torch.arange(0, feature_num * offset, offset,
-                                  dtype=torch.long)
-    x = x + feature_offset
-    return x
+# def mol2graph(mol):
 
 
-
-
-class QSARDataset(InMemoryDataset):
+class MoleculeDataset(InMemoryDataset):
     def __init__(self,
                  root,
-                 D=3,
+                 D=2,
                  # data = None,
                  # slices = None,
                  transform=None,
                  pre_transform=None,
                  pre_filter=None,
-                 dataset='435008',
+                 dataset='zinc250k',
                  empty=False):
 
         self.dataset = dataset
         self.root = root
         self.D = D
-        super(QSARDataset, self).__init__(root, transform, pre_transform,
-                                          pre_filter)
-        self.transform, self.pre_transform, self.pre_filter = transform, \
-                                                              pre_transform,\
-                                                              pre_filter
+        super(MoleculeDataset, self).__init__(root, transform, pre_transform, pre_filter)
+        self.transform, self.pre_transform, self.pre_filter = transform, pre_transform, pre_filter
 
         if not empty:
             self.data, self.slices = torch.load(self.processed_paths[0])
@@ -222,14 +207,14 @@ class QSARDataset(InMemoryDataset):
     #         data[key] = item[s]
     #     return data
 
-    @property
+    @ property
     def raw_file_names(self):
         file_name_list = os.listdir(self.raw_dir)
         # assert len(file_name_list) == 1     # currently assume we have a
         # # single raw file
         return file_name_list
 
-    @property
+    @ property
     def processed_file_names(self):
         return f'{self.dataset}-{self.D}D.pt'
 
@@ -245,7 +230,6 @@ class QSARDataset(InMemoryDataset):
         data_list = []
 
         if self.dataset not in ['435008', '1798', '435034']:
-            # print(f'dataset:{self.dataset}')
             raise ValueError('Invalid dataset name')
 
         for file, label in [(f'{self.dataset}_actives.smi', 1),
@@ -254,9 +238,6 @@ class QSARDataset(InMemoryDataset):
             smiles_list = pd.read_csv(
                 smiles_path, sep='\t', header=None)[0]
 
-            # Only get first N data, just for debugging
-            smiles_list = smiles_list[0:4000]
-
             for i in tqdm(range(len(smiles_list)), desc=f'{file}'):
                 # for i in tqdm(range(1)):
                 smi = smiles_list[i]
@@ -264,26 +245,9 @@ class QSARDataset(InMemoryDataset):
                 data = smiles2graph(self.D, smi)
                 if data is None:
                     continue
-
-                # # If use ogb_smiles2graph()
-                # try:
-                #     graph = ogb_smiles2graph(smi)
-                # except:
-                #     print('cannot convert smiles to graph')
-                #     pass
-
-                # data = Data()
-                # data.__num_nodes__ = int(graph['num_nodes'])
-                # data.edge_index = torch.from_numpy(graph['edge_index']).to(
-                #     torch.int64)
-                # data.edge_attr = torch.from_numpy(graph['edge_feat']).to(
-                #     torch.int64)
-                # data.x = torch.from_numpy(graph['node_feat']).to(torch.float32)
-
-                data.idx = i
-                data.y = torch.tensor([label], dtype=torch.int)
+                data.id = torch.tensor([i])
+                data.y = torch.tensor([label])
                 data.smiles = smi
-
                 data_list.append(data)
                 data_smiles_list.append(smiles_list[i])
 
@@ -297,44 +261,25 @@ class QSARDataset(InMemoryDataset):
         # write data_smiles_list in processed paths
         data_smiles_series = pd.Series(data_smiles_list)
         data_smiles_series.to_csv(os.path.join(
-            self.processed_dir, f'{self.dataset}-smiles.csv'), index=False,
-            header=False)
+            self.processed_dir, f'{self.dataset}-smiles.csv'), index=False, header=False)
 
-        # print(f'data length:{len(data_list)}')
         # for data in data_list:
         #     print(data)
         data, slices = self.collate(data_list)
         torch.save((data, slices), self.processed_paths[0])
 
-    def get_idx_split(self):
-        split_dict = {}
-        # # Total 362 actives. Split: train-290, 36, 36
-        # split_dict['train'] = [torch.tensor(x) for x in range(0, 326)] + [
-        #     torch.tensor(x) for x in range(1000, 10674)]  # 10K Training
-        # split_dict['valid'] = [torch.tensor(x) for x in range(326, 362)] + [
-        #     torch.tensor(x) for x in range(20000, 29964)]  # 10K val
-        # split_dict['test'] = [torch.tensor(x) for x in range(326, 362)] + [
-        #     torch.tensor(x) for x in range(3000, 9066)]
 
-        # Super small dataset for processing debugging.
-        # Total 362 actives. Split: 290, 36, 36
-        split_dict['train'] = [torch.tensor(x) for x in range(0, 326)] + [
-            torch.tensor(x) for x in range(400, 1074)]  # 1K Training
-        split_dict['valid'] = [torch.tensor(x) for x in range(326, 362)] + [
-            torch.tensor(x) for x in range(1100, 2064)]  # 1K val
-        split_dict['test'] = [torch.tensor(x) for x in range(326, 362)] + [
-            torch.tensor(x) for x in range(3000, 4000)]
-
-        return split_dict
-
-    def __getitem__(self, idx):
-        if isinstance(idx, int):
-            item = self.get(self.indices()[idx])
-            item.idx = idx
-            return item
-        else:
-            return self.index_select(idx)
-
+def smiles_cleaner(smiles):
+    '''
+    this function is to clean smiles for some known issues that makes rdkit:Chem.MolFromSmiles not working
+    '''
+    print('fixing smiles for rdkit...')
+    new_smiles = smiles
+    for pattern, replace_value in pattern_dict.items():
+        if pattern in smiles:
+            print('found pattern and fixed the smiles!')
+            new_smiles = smiles.replace(pattern, replace_value)
+    return new_smiles
 
 
 class ToXAndPAndEdgeAttrForDeg(object):
@@ -459,9 +404,60 @@ class ToXAndPAndEdgeAttrForDeg(object):
 
         return data
 
-
-
+        # test MoleculeDataset object
 if __name__ == "__main__":
-    pass
-    # dataset = MyQSARDataset(root='../../dataset/connect_aug/',
-    #                            generate_num=5)
+    print('testing...')
+    dataset = '435034'
+    # windows
+    # root = 'D:/Documents/JupyterNotebook/GCN_property/pretrain-gnns/chem/dataset/'
+    # linux
+    root = 'dataset/'
+    if dataset == '435008' or '1798' or '435034':
+        root += 'qsar_benchmark2015'
+        dataset = dataset
+    else:
+        raise Exception('cannot find dataset')
+    dataset = MoleculeDataset(D=2, root=root, dataset=dataset, pre_transform=ToXAndPAndEdgeAttrForDeg())
+    print('data 1:')
+    data = dataset[0]
+    print(data.smiles)
+    # print(data.selected_index_deg2)
+    print(data.nei_index_deg1)
+    # deg = degree(data.edge_index[0], data.x.shape[0]).unsqueeze(-1)
+    # print('p:')
+    # p = torch.cat((data.p, deg), dim=1)
+    # print(p)
+
+    print('\n')
+    print('data 2:')
+    data = dataset[1]
+    # print(data.selected_index_deg2)
+    print(data.nei_index_deg1)
+    # deg = degree(data.edge_index[0], data.x.shape[0]).unsqueeze(-1)
+    # print('p:\n')
+    # p = torch.cat((data.p, deg), dim=1)
+    # print(p)
+
+    loader = DataLoader(dataset, batch_size=2)
+    # for batch in loader:
+    #     print(f'batch.nei_index_deg2:{batch.nei_index_deg1}')
+    #     print(batch.selected_index_deg4)
+    # print('batch.p_focal_deg1\n')
+    # print(batch.p_focal_deg1)
+    # print('batch.nei_p_deg1\n')
+    # print(batch.nei_p_deg1)
+
+    # print('batch.p_focal_deg2\n')
+    # print(batch.p_focal_deg2)
+    # print('batch.nei_p_deg2\n')
+    # print(batch.nei_p_deg2)
+
+    # print('batch.p_focal_deg3\n')
+    # print(batch.p_focal_deg3)
+    # print('batch.nei_p_deg3\n')
+    # print(batch.nei_p_deg3)
+
+    # print('batch.p_focal_deg4\n')
+    # print(batch.p_focal_deg4)
+    # print('batch.nei_p_deg4\n')
+    # print(batch.nei_p_deg4)

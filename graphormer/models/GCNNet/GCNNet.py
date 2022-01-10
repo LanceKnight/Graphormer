@@ -37,7 +37,6 @@ class GCNNet(torch.nn.Module):
     def add_model_specific_args(parent_parser):
         """
         Add model arguments to the parent parser
-        :param gnn_type: a lowercase string specifying GNN type
         :param parent_parser: parent parser for adding arguments
         :return: parent parser with added arguments
         """

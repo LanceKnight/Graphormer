@@ -1,4 +1,5 @@
 from models.GCNNet.GCNNet import GCNNet
+from models.KGNN.KGNNNet import KGNNNet
 from evaluation import calculate_logAUC, calculate_ppv
 
 # Public libraries
@@ -19,6 +20,7 @@ class GNNModel(pl.LightningModule):
 
     def __init__(self,
                  gnn_type,
+                 num_layers,
                  input_dim,
                  hidden_dim,
                  output_dim,
@@ -31,7 +33,18 @@ class GNNModel(pl.LightningModule):
         if gnn_type == 'gcn':
             self.gnn_model = GCNNet(input_dim, hidden_dim)
         if gnn_type == 'kgnn':
-            self.gnn_model = KGNNet(input_dim, hidden_dim)
+            self.gnn_model = KGNNNet(num_layers=num_layers,
+                                     num_kernel1_1hop=4,
+                                     num_kernel2_1hop=4,
+                                     num_kernel3_1hop=4,
+                                     num_kernel4_1hop=4,
+                                     num_kernel1_Nhop=4,
+                                     num_kernel2_Nhop=4,
+                                     num_kernel3_Nhop=4,
+                                     num_kernel4_Nhop=4,
+                                     x_dim = input_dim,
+                                     graph_embedding_dim = hidden_dim
+                                     )
         else:
             raise ValueError("model.py::GNNModel: GNN model type is not "
                              "defined.")
@@ -76,6 +89,8 @@ class GNNModel(pl.LightningModule):
 
         if gnn_type == 'gcn':
             GCNNet.add_model_specific_args(parent_parser)
+        elif gnn_type == 'kgnn':
+            KGNNNet.add_model_specific_args(parent_parser)
         return parent_parser
 
     def training_step(self, batch_data, batch_idx):

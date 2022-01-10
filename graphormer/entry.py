@@ -26,9 +26,8 @@ def add_args(gnn_type):
 
     parser = ArgumentParser()
     parser = pl.Trainer.add_argparse_args(parser)  # default pl args
-    print(f'parser:{parser}')
     parser = GNNModel.add_model_args(gnn_type, parser)
-    print(f'parser:{parser}')
+    print(f'entry.py::parser:{parser} GNNModel:{GNNModel}')
     parser = DataLoaderModule.add_argparse_args(parser)
 
     # Custom arguments
@@ -36,7 +35,7 @@ def add_args(gnn_type):
     # Pretraining
 
     args = parser.parse_args()
-    args.max_steps = args.tot_iterations +1
+    args.max_steps = args.tot_iterations + 1
     print(args)
     return args
 
@@ -78,10 +77,12 @@ def prepare_actual_model(args):
     else:  # if not using pretrained model
         print(f'Creating a model from scratch...')
 
-        model = GNNModel(gnn_type, args.input_dim, args.hidden_dim,
-                         args.output_dim, args.warmup_iterations,
-                         args.tot_iterations, args.peak_lr, args.end_lr)
+        model = GNNModel(gnn_type, args.num_layers, args.input_dim,
+                         args.hidden_dim, args.output_dim,
+                         args.warmup_iterations, args.tot_iterations,
+                         args.peak_lr, args.end_lr)
     return model
+
 
 def actual_training(model, data_module, args):
     # Add checkpoint
@@ -126,7 +127,7 @@ def actual_training(model, data_module, args):
         LogAUCMonitor(stage='valid', logger=logger, logging_interval='epoch'))
     trainer.callbacks.append(
         LogAUCNoDropoutMonitor(stage='valid', logger=logger,
-                             logging_interval='epoch'))
+                               logging_interval='epoch'))
 
     # PPV monitors
     trainer.callbacks.append(
@@ -134,7 +135,8 @@ def actual_training(model, data_module, args):
     trainer.callbacks.append(
         PPVMonitor(stage='valid', logger=logger, logging_interval='epoch'))
     trainer.callbacks.append(
-        PPVNoDropoutMonitor(stage='valid', logger=logger, logging_interval='epoch'))
+        PPVNoDropoutMonitor(stage='valid', logger=logger,
+                            logging_interval='epoch'))
 
     # Learning rate monitors
     # trainer.callbacks.append(LearningRateMonitor(logging_interval='step'))
@@ -153,7 +155,7 @@ def actual_training(model, data_module, args):
         trainer.fit(model=model, datamodule=data_module)
 
 
-def main(gnn_type, logger=None):
+def main(gnn_type):
     """
     the main process that defines model and data
     also trains and evaluate the model
@@ -192,7 +194,7 @@ if __name__ == '__main__':
     # argument is that model specific arguments depends on it
 
     task = Task.init(project_name=f"Tests/{gnn_type}",
-                     task_name="resume_from_checkpoint",
+                     task_name="make_kgnn_work",
                      tags=[gnn_type, "debug"])
     logger = task.get_logger()
     main(gnn_type)
