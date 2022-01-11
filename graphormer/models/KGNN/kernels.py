@@ -37,12 +37,29 @@ class KernelConv(Module):
                  init_support_attr_sc_weight=0.2,
                  init_edge_attr_support_sc_weight=0.2,
                  weight_requires_grad=False):
+        """
+        Do the molecular convolution between a neighborhood and a kernel
+        :param L:
+        :param D:
+        :param num_supports:
+        :param node_attr_dim:
+        :param edge_attr_dim:
+        :param init_kernel: if not provided, create a random kernel
+        :param requires_grad: if true, the kernel is trainable
+        :param init_length_sc_weight: initial length score weight
+        :param init_angle_sc_weight: initial angle score weight
+        :param init_center_attr_sc_weight: initial center attr score weight
+        :param init_support_attr_sc_weight: initial support attr score weight
+        :param init_edge_attr_support_sc_weight: initial edge attr score weight
+        :param weight_requires_grad: if true, the weights of subscores are
+        trainable
+        """
         super(KernelConv, self).__init__()
         if init_kernel is None:
             if (L is None) or (D is None) or (num_supports is None) or (
                     node_attr_dim is None) or (edge_attr_dim is None):
                 raise Exception(
-                    'either numer of kernels L, convolution dimention D, '
+                    'either number of kernels L, convolution dimention D, '
                     'number of support num_supports or feature dimension '
                     'node_attr_dim is not specified')
             else:
@@ -101,9 +118,13 @@ class KernelConv(Module):
         return output
 
     def intra_angle(self, p):
-        '''
-        angles between each row vectors
-        '''
+        """
+        Calculate angle score from a
+        :param p:
+        :return:
+        """
+
+
         cos = CosineSimilarity(dim=-1)
         new_p = torch.roll(p, 1, dims=-2)
         #         print(f'new p:')
@@ -113,8 +134,14 @@ class KernelConv(Module):
         return sc
 
     def arctan_sc(self, tensor1, tensor2, dim=None):
+        """
+        Calculate
+        :param tensor1:
+        :param tensor2:
+        :param dim:
+        :return:
+        """
         diff = torch.square(tensor1 - tensor2)
-        #         print(diff)
         if dim is not None:
             sc = torch.sum(diff, dim=dim)
         else:
@@ -123,11 +150,18 @@ class KernelConv(Module):
         return sc
 
     def get_angle_score(self, p_neighbor, p_support):
-        #         print('get_angle_score')
-        #         print(f'p_neighbor:{p_neighbor.shape}')
-        #         print(p_neighbor.shape)
-        #         print(f'p_support:{p_support.shape}')
-        #         print(p_support.shape)
+        """
+        Calculate angle scores between the coordinates of neighbors and
+        supports.
+
+        :param p_neighbor: a tensor of size [num_neighborhoood, degree,
+        D] for the neighborhood,
+        where num_degree is the number of neighborhood of a certain degree,
+        the degree is that degree, D is the dimension,
+        :param p_support: a tensor of size [num_neighborhoood, degree,
+        D] for the kernel
+        :return:
+        """
         if (p_support.shape[-2] == 1):
             return torch.full((p_support.shape[0], p_neighbor.shape[0]),
                               math.pi / 2, device=p_neighbor.device)
@@ -311,14 +345,11 @@ class KernelConv(Module):
             p_neighbor = kwargv['p_neighbor']
             edge_attr_neighbor = kwargv['edge_attr_neighbor']
 
+        # Check if neighborhood and kernel agrees in degree
         if (p_focal.shape[-1] != self.p_support.shape[-1]):
             raise Exception(
                 f'data coordinates is of {p_focal.shape[-1]}D, but the '
                 f'kernel is {self.p_support.shape[-1]}D')
-
-        #         x, x_focal, p, edge_attr, edge_index =
-        #         self.convert_graph_to_receptive_field(x, p, edge_index,
-        #         edge_attr)
 
         # sc, length_sc, angle_sc, supp_attr_sc, center_attr_sc, \
         # edge_attr_support_sc

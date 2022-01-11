@@ -34,16 +34,17 @@ class GNNModel(pl.LightningModule):
             self.gnn_model = GCNNet(input_dim, hidden_dim)
         if gnn_type == 'kgnn':
             self.gnn_model = KGNNNet(num_layers=num_layers,
-                                     num_kernel1_1hop=4,
-                                     num_kernel2_1hop=4,
-                                     num_kernel3_1hop=4,
-                                     num_kernel4_1hop=4,
-                                     num_kernel1_Nhop=4,
-                                     num_kernel2_Nhop=4,
-                                     num_kernel3_Nhop=4,
-                                     num_kernel4_Nhop=4,
+                                     num_kernel1_1hop=10,
+                                     num_kernel2_1hop=10,
+                                     num_kernel3_1hop=10,
+                                     num_kernel4_1hop=10,
+                                     num_kernel1_Nhop=10,
+                                     num_kernel2_Nhop=10,
+                                     num_kernel3_Nhop=10,
+                                     num_kernel4_Nhop=10,
                                      x_dim = input_dim,
-                                     graph_embedding_dim = hidden_dim
+                                     graph_embedding_dim = hidden_dim,
+                                     predefined_kernelsets=False
                                      )
         else:
             raise ValueError("model.py::GNNModel: GNN model type is not "
