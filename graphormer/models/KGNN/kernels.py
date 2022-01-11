@@ -23,9 +23,16 @@ torch.autograd.set_detect_anomaly(True)
 
 
 class KernelConv(Module):
-    def __init__(self, L=None, D=None, num_supports=None, node_attr_dim=None,
-                 edge_attr_dim=None, init_kernel=None, requires_grad=True,
-                 init_length_sc_weight=0.2, init_angle_sc_weight=0.2,
+    def __init__(self,
+                 L=None,
+                 D=None,
+                 num_supports=None,
+                 node_attr_dim=None,
+                 edge_attr_dim=None,
+                 init_kernel=None,
+                 requires_grad=True,
+                 init_length_sc_weight=0.2,
+                 init_angle_sc_weight=0.2,
                  init_center_attr_sc_weight=0.2,
                  init_support_attr_sc_weight=0.2,
                  init_edge_attr_support_sc_weight=0.2,
@@ -213,122 +220,82 @@ class KernelConv(Module):
 
     def calculate_total_score(self, x_focal, p_focal, x_neighbor, p_neighbor,
                               edge_attr_neighbor):
-        # calibrate p_neighbor
+        # Calibrate neighbor coordinates
+        # Calibrated coordinates = original coordinates - center coordinates
         p_neighbor = p_neighbor - p_focal.unsqueeze(1)
 
-        # get kernel params
+        # Get kernel params
         x_center = self.x_center
         x_support = self.x_support
         edge_attr_support = self.edge_attr_support
         p_support = self.p_support
 
-        # print('=====cal total sc')
-        # print(f'x_center:{x_center.shape}')
-        # print(f'x_support:{x_support.shape}')
-        # print(f'edge_attr_support:{edge_attr_support.shape}')
-        # print(f'p_support:{p_support.shape}')
-        # print('\n')
-        # print(f'x_focal:{x_focal.shape}')
-        # print(f'p_focal:{p_focal.shape}')
-        # print(f'x_neighbor:{x_neighbor.shape}')
-        # print(f'p_neighbor:{p_neighbor.shape}')
-        # print(f'edge_attr_neighbor:{edge_attr_neighbor.shape}')
-
-        # because every sub-score is calculated using actan function,
+        # Because every sub-score is calculated using actan function,
         # which peaks at pi/2, so this max_atn is used to normalized the
         # score so it is in [0,1]
         max_atan = torch.tensor([math.pi / 2], device=p_neighbor.device)
 
-        # calculate the support attribute score
+        # Calculate the support attribute score
         permuted_x_support = self.permute(x_support)
-        #         print(f'permuted_x_support:{permuted_x_support.shape}')
         support_attr_sc = self.get_support_attribute_score(x_neighbor,
                                                            permuted_x_support) / max_atan
-        #         print(f'support_attr_sc:{support_attr_sc}')
-        # get the best support_attr_sc and its index
+
+        # Get the best support_attr_sc and its index
         best_support_attr_sc, best_support_attr_sc_index = torch.max(
             support_attr_sc, dim=1)
-        #         print(f'best_support_attr_sc:{best_support_attr_sc},
-        #         index:{best_support_attr_sc_index.shape}')
-        # print(f'index:{best_support_attr_sc_index}')
 
-        # calculate the angle score
-        permuted_p_support = self.permute(p_support)
-        permuted_p_support = permuted_p_support.unsqueeze(2).expand(
-            permuted_p_support.shape[0], permuted_p_support.shape[1],
-            best_support_attr_sc_index.shape[1], permuted_p_support.shape[2],
-            permuted_p_support.shape[3])
-        #         print(f'permuted_p_support:{permuted_p_support}')
-        selected_index = best_support_attr_sc_index.unsqueeze(1).unsqueeze(
-            -1).unsqueeze(-1).expand(
-            permuted_p_support.shape[0], 1,
-            best_support_attr_sc_index.shape[-1], permuted_p_support.shape[3],
-            permuted_p_support.shape[4])
-        best_p_support = torch.gather(permuted_p_support, 1, selected_index)
-        #         print(f'best_p_support:{best_p_support}')
-        angle_sc = self.get_angle_score(p_neighbor, best_p_support) / max_atan
-        # print(f'angle_sc.shape:{angle_sc.shape}')
+        # Calculate the angle score
+        # permuted_p_support = self.permute(p_support)
+        # permuted_p_support = permuted_p_support.unsqueeze(2).expand(
+        #     permuted_p_support.shape[0], permuted_p_support.shape[1],
+        #     best_support_attr_sc_index.shape[1], permuted_p_support.shape[2],
+        #     permuted_p_support.shape[3])
+        # #         print(f'permuted_p_support:{permuted_p_support}')
+        # selected_index = best_support_attr_sc_index.unsqueeze(1).unsqueeze(
+        #     -1).unsqueeze(-1).expand(
+        #     permuted_p_support.shape[0], 1,
+        #     best_support_attr_sc_index.shape[-1], permuted_p_support.shape[3],
+        #     permuted_p_support.shape[4])
+        # best_p_support = torch.gather(permuted_p_support, 1, selected_index)
+        # angle_sc = self.get_angle_score(p_neighbor, best_p_support) / max_atan
 
-        # calculate length
-        best_p_support = best_p_support.squeeze(1)
-        #         print(f'best_p_support:{best_p_support.shape}')
-        length_sc = self.get_length_score(p_neighbor,
-                                          best_p_support) / max_atan
-        # print(f'length_sc.shape:{length_sc.shape}')
+        # Calculate length score
+        # best_p_support = best_p_support.squeeze(1)
+        # length_sc = self.get_length_score(p_neighbor,
+        #                                   best_p_support) / max_atan
 
-        # calculate the center attribute score
-        #         print(f'x_center:{x_center.shape}')
+
+        # Calculate the center attribute score
         center_attr_sc = self.get_center_attribute_score(x_focal,
                                                          x_center) / max_atan
-        # print(f'center_attr_sc.shape:{center_attr_sc.shape}')
 
-        # calculate the edge attribute score
+        # Calculate the edge attribute score
         selected_index = best_support_attr_sc_index.unsqueeze(-1).unsqueeze(
             -1).expand(
             best_support_attr_sc_index.shape[0],
             best_support_attr_sc_index.shape[1], edge_attr_support.shape[-2],
             edge_attr_support.shape[-1])
-        #         print(f'edge_attr_support:{edge_attr_support.shape}')
         permuted_edge_attr_support = self.permute(edge_attr_support)
-        #         print(f'permuted:{permuted_edge_attr_support.shape}')
-        #         print(f'best_angle_sc_index:{best_angle_sc_index.shape}')
         best_edge_attr_support = torch.gather(
             permuted_edge_attr_support, 1, selected_index)
-        #         print(f'best_edge_attr_support:{selected_index.shape}')
-        #         print(f'edge_attr_neighbor:{edge_attr_neighbor.shape}')
-        #         print(f'best_edge_attr_support:{
-        #         best_edge_attr_support.shape}')
         edge_attr_support_sc = self.get_edge_attribute_score(
             edge_attr_neighbor, best_edge_attr_support) / max_atan
-        # print(f'edge_attr_support_sc.shape:{edge_attr_support_sc.shape}')
+        support_attr_sc = best_support_attr_sc
 
-        #         # convert each score to correct dimension
-        #         angle_sc = angle_sc
-        #         length_sc = length_sc
-        support_attr_sc = best_support_attr_sc  # .unsqueeze(dim=0)
-        #         center_attr_sc = center_attr_sc
-        #         edge_attr_support_sc = edge_attr_support_sc
 
-        # the maxium value a arctain function can get
+        sc = (
+                     # length_sc * self.length_sc_weight
+                     # + angle_sc * self.angle_sc_weight
+                     support_attr_sc * self.support_attr_sc_weight
+                     + center_attr_sc * self.center_attr_sc_weight
+                     + edge_attr_support_sc *
+                     self.edge_attr_support_sc_weight) / 3
 
-        one = torch.tensor([1], device=p_neighbor.device)
-        sc = (length_sc * self.length_sc_weight +
-              angle_sc * self.angle_sc_weight +
-              support_attr_sc * self.support_attr_sc_weight +
-              center_attr_sc * self.center_attr_sc_weight +
-              edge_attr_support_sc * self.edge_attr_support_sc_weight) / 5
 
-        # sc = torch.atan(1 /
-        #                 (torch.square(length_sc - max_atan) +
-        #                  torch.square(angle_sc - max_atan) +
-        #                  torch.square(support_attr_sc - max_atan) +
-        #                  torch.square(center_attr_sc - max_atan) +
-        #                  torch.square(edge_attr_support_sc - max_atan)
-        #                  )).squeeze(0)
-        # sc = sc / max_atan  # normalize the score to be in [0,1]
 
-        return sc, length_sc, angle_sc, support_attr_sc, center_attr_sc, \
-               edge_attr_support_sc
+        return sc
+        # return sc, length_sc, angle_sc, support_attr_sc, center_attr_sc, \
+        #        edge_attr_support_sc
 
     def forward(self, *argv, **kwargv):
         if len(kwargv) == 1:
@@ -353,8 +320,9 @@ class KernelConv(Module):
         #         self.convert_graph_to_receptive_field(x, p, edge_index,
         #         edge_attr)
 
-        sc, length_sc, angle_sc, supp_attr_sc, center_attr_sc, \
-        edge_attr_support_sc = self.calculate_total_score(
+        # sc, length_sc, angle_sc, supp_attr_sc, center_attr_sc, \
+        # edge_attr_support_sc
+        sc = self.calculate_total_score(
             x_focal, p_focal, x_neighbor, p_neighbor, edge_attr_neighbor)
 
         # print('\n')
@@ -730,7 +698,7 @@ class BaseKernelSetConv(Module):
 
                     else:
                         raise Exception(
-                            f'kernels.pyBaseKernelSet:both fixed and '
+                            f'kernels.py::BaseKernelSet:both fixed and '
                             f'trainable kernelconv_set are None for degree {deg}')
 
                 zeros[
@@ -839,7 +807,8 @@ class PredefinedKernelSetConv(BaseKernelSetConv):
             for i in range(L1):
                 trainable_kernel1 = \
                     generate_kernel_with_angle_and_length_and_edge_attr(
-                    D, typical_smiles, typical_center_atom_id, node_attr_dim)
+                        D, typical_smiles, typical_center_atom_id,
+                        node_attr_dim)
                 trainable_kernel1_list.append(trainable_kernel1)
             self.trainable_kernel1 = self.cat_kernels(
                 trainable_kernel1_list)  # generate a single tensor with L
@@ -873,7 +842,8 @@ class PredefinedKernelSetConv(BaseKernelSetConv):
             for i in range(L2):
                 trainable_kernel2 = \
                     generate_kernel_with_angle_and_length_and_edge_attr(
-                    D, typical_smiles, typical_center_atom_id, node_attr_dim)
+                        D, typical_smiles, typical_center_atom_id,
+                        node_attr_dim)
                 trainable_kernel2_list.append(trainable_kernel2)
             self.trainable_kernel2 = self.cat_kernels(
                 trainable_kernel2_list)  # generate a single tensor with L
@@ -907,7 +877,8 @@ class PredefinedKernelSetConv(BaseKernelSetConv):
             for i in range(L3):
                 trainable_kernel3 = \
                     generate_kernel_with_angle_and_length_and_edge_attr(
-                    D, typical_smiles, typical_center_atom_id, node_attr_dim)
+                        D, typical_smiles, typical_center_atom_id,
+                        node_attr_dim)
                 trainable_kernel3_list.append(trainable_kernel3)
             self.trainable_kernel3 = self.cat_kernels(
                 trainable_kernel3_list)  # generate a single tensor with L
@@ -941,7 +912,8 @@ class PredefinedKernelSetConv(BaseKernelSetConv):
             for i in range(L4):
                 trainable_kernel4 = \
                     generate_kernel_with_angle_and_length_and_edge_attr(
-                    D, typical_smiles, typical_center_atom_id, node_attr_dim)
+                        D, typical_smiles, typical_center_atom_id,
+                        node_attr_dim)
                 trainable_kernel4_list.append(trainable_kernel4)
             self.trainable_kernel4 = self.cat_kernels(
                 trainable_kernel4_list)  # generate a single tensor with L
@@ -1079,7 +1051,8 @@ class PredefinedKernelSetConv(BaseKernelSetConv):
 #             generate the trainable KernelConv
 #         else:
 #             trainable_kernelconv2 = None
-#         print(f'PredefinedNHopKernelSetConv: there are {L2} degree2 trainable kernels')
+#         print(f'PredefinedNHopKernelSetConv: there are {L2} degree2
+#         trainable kernels')
 
 #         # degree3 kernels
 #         typical_smiles = 'C=C'
@@ -1087,13 +1060,20 @@ class PredefinedKernelSetConv(BaseKernelSetConv):
 #         trainable_kernel3_list = []
 #         if L3 != 0:
 #             for i in range(L3):
-#                 trainable_kernel3 = generate_kernel_with_angle_and_length_and_edge_attr(D, typical_smiles, typical_center_atom_id, node_attr_dim)
+#                 trainable_kernel3 =
+#                 generate_kernel_with_angle_and_length_and_edge_attr(D,
+#                 typical_smiles, typical_center_atom_id, node_attr_dim)
 #                 trainable_kernel3_list.append(trainable_kernel3)
-#             self.trainable_kernel3 = self.cat_kernels(trainable_kernel3_list)  # generate a single tensor with L as the first dimension from the list
-#             trainable_kernelconv3 = KernelConv(init_kernel=self.trainable_kernel3, requires_grad=True)  # generate the trainable KernelConv
+#             self.trainable_kernel3 = self.cat_kernels(
+#             trainable_kernel3_list)  # generate a single tensor with L as
+#             the first dimension from the list
+#             trainable_kernelconv3 = KernelConv(
+#             init_kernel=self.trainable_kernel3, requires_grad=True)  #
+#             generate the trainable KernelConv
 #         else:
 #             trainable_kernelconv3 = None
-#         print(f'PredefinedNHopKernelSetConv: there are {L3} degree3 trainable kernels')
+#         print(f'PredefinedNHopKernelSetConv: there are {L3} degree3
+#         trainable kernels')
 
 #         # degree4 kernels
 #         typical_smiles = 'CC'
@@ -1101,21 +1081,33 @@ class PredefinedKernelSetConv(BaseKernelSetConv):
 #         trainable_kernel4_list = []
 #         if L4 != 0:
 #             for i in range(L4):
-#                 trainable_kernel4 = generate_kernel_with_angle_and_length_and_edge_attr(D, typical_smiles, typical_center_atom_id, node_attr_dim)
+#                 trainable_kernel4 =
+#                 generate_kernel_with_angle_and_length_and_edge_attr(D,
+#                 typical_smiles, typical_center_atom_id, node_attr_dim)
 #                 trainable_kernel4_list.append(trainable_kernel4)
-#             self.trainable_kernel4 = self.cat_kernels(trainable_kernel4_list)  # generate a single tensor with L as the first dimension from the list
-#             trainable_kernelconv4 = KernelConv(init_kernel=self.trainable_kernel4, requires_grad=True)  # generate the trainable KernelConv
+#             self.trainable_kernel4 = self.cat_kernels(
+#             trainable_kernel4_list)  # generate a single tensor with L as
+#             the first dimension from the list
+#             trainable_kernelconv4 = KernelConv(
+#             init_kernel=self.trainable_kernel4, requires_grad=True)  #
+#             generate the trainable KernelConv
 #         else:
 #             trainable_kernelconv4 = None
-#         print(f'PredefinedNHopKernelSetConv: there are {L4} degree4 trainable kernels')
+#         print(f'PredefinedNHopKernelSetConv: there are {L4} degree4
+#         trainable kernels')
 
-#         super(PredefinedNHopKernelSetConv, self).__init__(trainable_kernelconv1=trainable_kernelconv1, trainable_kernelconv2=trainable_kernelconv2, trainable_kernelconv3=trainable_kernelconv3, trainable_kernelconv4=trainable_kernelconv4)
+#         super(PredefinedNHopKernelSetConv, self).__init__(
+#         trainable_kernelconv1=trainable_kernelconv1,
+#         trainable_kernelconv2=trainable_kernelconv2,
+#         trainable_kernelconv3=trainable_kernelconv3,
+#         trainable_kernelconv4=trainable_kernelconv4)
 
 #     def cat_kernels(self, kernel_list):
 #         x_center_list = [kernel.x_center for kernel in kernel_list]
 #         x_support_list = [kernel.x_support for kernel in kernel_list]
 #         p_support_list = [kernel.p_support for kernel in kernel_list]
-#         edge_attr_support_list = [kernel.edge_attr_support for kernel in kernel_list]
+#         edge_attr_support_list = [kernel.edge_attr_support for kernel in
+#         kernel_list]
 
 #         # for x_center in x_center_list:
 #         #     print(x_center.shape)
@@ -1123,7 +1115,8 @@ class PredefinedKernelSetConv(BaseKernelSetConv):
 #         x_support = torch.cat(x_support_list)
 #         p_support = torch.cat(p_support_list)
 #         edge_attr_support = torch.cat(edge_attr_support_list)
-#         data = Data(x_center=x_center, x_support=x_support, p_support=p_support, edge_attr_support=edge_attr_support)
+#         data = Data(x_center=x_center, x_support=x_support,
+#         p_support=p_support, edge_attr_support=edge_attr_support)
 #         return data
 
 #     def get_num_kernel(self):
@@ -1150,15 +1143,19 @@ class PredefinedKernelSetConv(BaseKernelSetConv):
 #         the output will be of dimension L1+L2+L3+L4
 #     '''
 
-#     def __init__(self, x_dim, p_dim, edge_dim, L1=None, L2=None, L3=None, L4=None, predined_kernelsets=True):
+#     def __init__(self, x_dim, p_dim, edge_dim, L1=None, L2=None, L3=None,
+#     L4=None, predined_kernelsets=True):
 
 #         super(KernelLayer, self).__init__()
 #         if(predined_kernelsets == True):
-#             self.conv = PredefinedKernelSetConv(D=p_dim, node_attr_dim=x_dim, edge_attr_dim=edge_dim)
+#             self.conv = PredefinedKernelSetConv(D=p_dim,
+#             node_attr_dim=x_dim, edge_attr_dim=edge_dim)
 #         else:
 #             if L1 is None or L2 is None or L3 is None or L4 is None:
-#                 raise Exception('KernelLayer(): if predined_kernelsets is false, then L1-L4 needs to be specified')
-#             self.conv = KernelSetConv(L1, L2, L3, L4, D=p_dim, node_attr_dim=x_dim, edge_attr_dim=edge_dim)
+#                 raise Exception('KernelLayer(): if predined_kernelsets is
+#                 false, then L1-L4 needs to be specified')
+#             self.conv = KernelSetConv(L1, L2, L3, L4, D=p_dim,
+#             node_attr_dim=x_dim, edge_attr_dim=edge_dim)
 
 #     def forward(self, data):
 #         return self.conv(data=data)

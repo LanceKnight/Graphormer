@@ -18,7 +18,7 @@ num_reference = 10000  # number of reference molecules for augmentation
 
 def smiles_cleaner(smiles):
     '''
-    this function is to clean smiles for some known issues that makes
+    This function is to clean smiles for some known issues that makes
     rdkit:Chem.MolFromSmiles not working
     '''
     print('fixing smiles for rdkit...')

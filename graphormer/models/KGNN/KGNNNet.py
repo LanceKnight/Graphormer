@@ -7,7 +7,6 @@ from torch_geometric.nn import global_mean_pool
 from torch.optim import Adam
 
 
-
 class KGNNNet(torch.nn.Module):
     def __init__(self, num_layers=1, num_kernel1_1hop=0, num_kernel2_1hop=0,
                  num_kernel3_1hop=0, num_kernel4_1hop=0, num_kernel1_Nhop=0,
