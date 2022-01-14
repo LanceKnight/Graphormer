@@ -160,8 +160,10 @@ class KernelConv(Module):
         the degree is that degree, D is the dimension,
         :param p_support: a tensor of size [num_neighborhoood, degree,
         D] for the kernel
-        :return:
+        :return: returns the angle score
         """
+
+        # If the degree is 1, always return
         if (p_support.shape[-2] == 1):
             return torch.full((p_support.shape[0], p_neighbor.shape[0]),
                               math.pi / 2, device=p_neighbor.device)
