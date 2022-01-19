@@ -91,3 +91,16 @@ def calculate_ppv(true_y, predicted_score):
     else:
         ppv = np.NAN
     return ppv
+
+def calculate_accuracy(true_y, predicted_score):
+    predicted_prob = sigmoid(predicted_score) # Convert to range [0,1]
+    predicted_y = np.where(predicted_prob > 0.5, 1, 0) # Convert to binary
+
+    tn, fp, fn, tp = confusion_matrix(
+        true_y, predicted_y, labels=[0, 1]).ravel()
+    print(f'\ntn:{tn}, fp:{fp}, fn:{fn}, tp:{tp}, tp+fp:{tp + fp}')
+    if (tp + fp + tn + fn) != 0:
+        accuracy = ((tp + tn) / (tp + fp + tn + fn))
+    else:
+        accuracy = np.NAN
+    return accuracy

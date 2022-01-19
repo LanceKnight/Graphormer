@@ -168,3 +168,14 @@ class PPVNoDropoutMonitor(MetricMonitor):
                                                   logging_interval=logging_interval,
                                                   title=f'PPV_by_{logging_interval}',
                                                   series='no_dropout')
+
+class AccuracyMonitor(MetricMonitor):
+    def __init__(self, stage='valid', logger =None, logging_interval=None,
+                 title = None ):
+        super(AccuracyMonitor, self).__init__(stage=stage,
+                                                  metric="accuracy",
+                                                  logger=logger,
+                                                  logging_interval=logging_interval,
+                                                  title=f'accuracy_by_'
+                                                        f'{logging_interval}')
+

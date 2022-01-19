@@ -1,6 +1,6 @@
 from models.GCNNet.GCNNet import GCNNet
 from models.KGNN.KGNNNet import KGNNNet
-from evaluation import calculate_logAUC, calculate_ppv
+from evaluation import calculate_logAUC, calculate_ppv, calculate_accuracy
 
 # Public libraries
 import pytorch_lightning as pl
@@ -163,11 +163,12 @@ class GNNModel(pl.LightningModule):
         numpy_y = true_y.cpu().numpy()
         logAUC = calculate_logAUC(numpy_y, numpy_prediction)
         ppv = calculate_ppv(numpy_y, numpy_prediction)
-
+        accuracy = calculate_accuracy(numpy_y, numpy_prediction)
         return {
             'loss': loss,
             'logAUC': logAUC,
             'ppv': ppv,
+            'accuracy':accuracy
         }
 
     def validation_epoch_end(self, valid_step_outputs):

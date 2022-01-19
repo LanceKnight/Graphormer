@@ -4,7 +4,7 @@
 from data import DataLoaderModule, get_dataset
 from model import GNNModel
 from monitors import LossMonitor, LossNoDropoutMonitor, LogAUCMonitor, \
-    LogAUCNoDropoutMonitor, PPVMonitor, PPVNoDropoutMonitor
+    LogAUCNoDropoutMonitor, PPVMonitor, PPVNoDropoutMonitor, AccuracyMonitor
 
 from argparse import ArgumentParser
 from pprint import pprint
@@ -137,6 +137,11 @@ def actual_training(model, data_module, args):
     trainer.callbacks.append(
         PPVNoDropoutMonitor(stage='valid', logger=logger,
                             logging_interval='epoch'))
+
+    # Accuracy monitors
+    trainer.callbacks.append(
+        AccuracyMonitor(stage='valid', logger=logger,
+                        logging_interval='epoch'))
 
     # Learning rate monitors
     # trainer.callbacks.append(LearningRateMonitor(logging_interval='step'))
