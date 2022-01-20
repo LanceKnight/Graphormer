@@ -46,7 +46,7 @@ def calculate_logAUC(true_y, predicted_score, FPR_range=(0.001, 0.1)):
         range2 = np.log10(FPR_range[1])
         if (range1 >= range2):
             raise Exception('FPR range2 must be greater than range1')
-    print(f'true_y:{true_y}, predicted_score:{predicted_score}')
+    # print(f'true_y:{true_y}, predicted_score:{predicted_score}')
     fpr, tpr, thresholds = roc_curve(true_y, predicted_score, pos_label=1)
     x = fpr
     y = tpr
@@ -91,3 +91,20 @@ def calculate_ppv(true_y, predicted_score):
     else:
         ppv = np.NAN
     return ppv
+
+def calculate_accuracy(true_y, predicted_score):
+    predicted_prob = sigmoid(predicted_score) # Convert to range [0,1]
+    predicted_y = np.where(predicted_prob > 0.5, 1, 0) # Convert to binary
+
+    tn, fp, fn, tp = confusion_matrix(
+        true_y, predicted_y, labels=[0, 1]).ravel()
+
+    if (tp + fp + tn + fn) != 0:
+        accuracy = ((tp + tn) / (tp + fp + tn + fn))
+        print(f'\ntn:{tn}, fp:{fp}, fn:{fn}, tp:{tp}, all:'
+              f'{tp + fp + tn + fn}, accuracy:{accuracy}')
+    else:
+        accuracy = np.NAN
+        print(f'\ntn:{tn}, fp:{fp}, fn:{fn}, tp:{tp}, all:'
+              f'{tp + fp + tn + fn}, accuracy:NAN')
+    return accuracy

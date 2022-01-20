@@ -1,5 +1,5 @@
 from collator import collator
-from wrapper import QSARDataset
+from wrapper import QSARDataset, D4DCHPDataset, ToXAndPAndEdgeAttrForDeg
 
 from pytorch_lightning import LightningDataModule
 import torch
@@ -11,6 +11,7 @@ from functools import partial
 
 aug_num = 5
 dataset = None
+
 
 # class ConvertYFromIntToFloat(object):
 #     """
@@ -34,13 +35,30 @@ def get_dataset(dataset_name='435034'):
     :return:
     """
     if dataset_name in ['435008', '1798', '435034']:
-        qsar_dataset =QSARDataset(root='../../dataset/qsar',
-                                  dataset=dataset_name,
-                                 )
+        qsar_dataset = QSARDataset(root='../../dataset/qsar',
+                                   dataset=dataset_name,
+                                   pre_transform=ToXAndPAndEdgeAttrForDeg(),
+                                   )
         dataset = {
             'num_class': 1,
             'dataset': qsar_dataset,
             'num_samples': len(qsar_dataset),
+        }
+    elif dataset_name in ['CHIRAL1', 'DIFF5']:
+        d4_dchp_dataset = D4DCHPDataset(
+            root='../../dataset/d4_docking/',
+            subset_name=dataset_name,
+            data_file=
+            '../../dataset/d4_docking/d4_docking_rs.csv',
+            idx_file='../../dataset/d4_docking/rs/split0.npy',
+            D=3,
+            pre_transform=ToXAndPAndEdgeAttrForDeg(),
+        )
+        print(f'd4_dchp_dataset:{d4_dchp_dataset}')
+        dataset = {
+            'num_class': 1,
+            'dataset': d4_dchp_dataset,
+            'num_samples': len(d4_dchp_dataset)
         }
 
     else:
@@ -86,6 +104,7 @@ class DataLoaderModule(LightningDataModule):
 
     def setup(self, stage: str = None):
         split_idx = self.dataset['dataset'].get_idx_split()
+        print(f'split_idx:{split_idx}')
 
         self.dataset_train = self.dataset['dataset'][split_idx["train"]]
         print(f'training len:{len(self.dataset_train)})')
@@ -141,31 +160,19 @@ class DataLoaderModule(LightningDataModule):
         return train_loader
 
     def val_dataloader(self):
+        print(f'dataset_train:{self.dataset_train[0]}')
         val_loader = DataLoader(
             self.dataset_val,
-            batch_size=self.batch_size,
-            shuffle=False,
+            batch_size=len(self.dataset_val),
+            shuffle=True,
             num_workers=self.num_workers,
-            pin_memory=False,
-            collate_fn=partial(collator,
-                               max_node=get_dataset(self.dataset_name)[
-                                   'max_node'],
-                               multi_hop_max_dist=self.multi_hop_max_dist,
-                               spatial_pos_max=self.spatial_pos_max),
         )
-        print('len(val_dataloader)', len(val_loader))
+        print(f'dataset_train:{self.dataset_train[0]}')
         train_loader = DataLoader(
             self.dataset_train,
-            batch_size=self.batch_size,
+            batch_size=len(self.dataset_train),
             shuffle=True,
-            # sampler= train_sampler,
             num_workers=self.num_workers,
-            pin_memory=True,
-            collate_fn=partial(collator,
-                               max_node=get_dataset(self.dataset_name)[
-                                   'max_node'],
-                               multi_hop_max_dist=self.multi_hop_max_dist,
-                               spatial_pos_max=self.spatial_pos_max),
         )
         return val_loader, train_loader
 

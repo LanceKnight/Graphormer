@@ -1,6 +1,11 @@
+# Written by Yunchao "Lance" Liu (www.LiuYunchao.com)
+# Adapted from Graphormer (https://github.com/microsoft/Graphormer)
+
 from data import DataLoaderModule, get_dataset
 from model import GNNModel
-from monitors import LossMonitor, LossNoDropoutMonitor, LogAUCMonitor, PPVMonitor
+from monitors import LossMonitor, LossNoDropoutMonitor, LogAUCMonitor, \
+    LogAUCNoDropoutMonitor, PPVMonitor, PPVNoDropoutMonitor, \
+    AccuracyMonitor, AccuracyNoDropoutMonitor
 
 from argparse import ArgumentParser
 from pprint import pprint
@@ -22,9 +27,8 @@ def add_args(gnn_type):
 
     parser = ArgumentParser()
     parser = pl.Trainer.add_argparse_args(parser)  # default pl args
-    print(f'parser:{parser}')
     parser = GNNModel.add_model_args(gnn_type, parser)
-    print(f'parser:{parser}')
+    print(f'entry.py::parser:{parser} GNNModel:{GNNModel}')
     parser = DataLoaderModule.add_argparse_args(parser)
 
     # Custom arguments
@@ -32,6 +36,7 @@ def add_args(gnn_type):
     # Pretraining
 
     args = parser.parse_args()
+    args.max_steps = args.tot_iterations + 1
     print(args)
     return args
 
@@ -73,10 +78,12 @@ def prepare_actual_model(args):
     else:  # if not using pretrained model
         print(f'Creating a model from scratch...')
 
-        model = GNNModel(gnn_type, args.input_dim, args.hidden_dim,
-                         args.output_dim, args.warmup_iterations,
-                         args.tot_iterations, args.peak_lr, args.end_lr)
+        model = GNNModel(gnn_type, args.num_layers, args.input_dim,
+                         args.hidden_dim, args.output_dim,
+                         args.warmup_iterations, args.tot_iterations,
+                         args.peak_lr, args.end_lr)
     return model
+
 
 def actual_training(model, data_module, args):
     # Add checkpoint
@@ -84,9 +91,11 @@ def actual_training(model, data_module, args):
     actual_training_checkpoint_callback = ModelCheckpoint(
         dirpath=actual_training_checkpoint_dir,
         filename=data_module.dataset_name,
+        save_last=True
     )
 
     # Resume from the checkpoint
+    print(f'dir:{actual_training_checkpoint_dir}')
     if not args.test and not args.validate and os.path.exists(
             f'{actual_training_checkpoint_dir}/last.ckpt'):
         print('Resuming from actual training checkpoint')
@@ -95,6 +104,8 @@ def actual_training(model, data_module, args):
 
     trainer = pl.Trainer.from_argparse_args(args)
     trainer.callbacks.append(actual_training_checkpoint_callback)
+    print(f'max_epoch:{trainer.max_epochs}')
+
 
     # Loss monitors
     trainer.callbacks.append(
@@ -102,31 +113,47 @@ def actual_training(model, data_module, args):
     trainer.callbacks.append(
         LossMonitor(stage='train', logger=logger,
                     logging_interval='epoch'))
-
     trainer.callbacks.append(
         LossMonitor(stage='valid', logger=logger, logging_interval='step'))
     trainer.callbacks.append(
         LossMonitor(stage='valid', logger=logger,
                     logging_interval='epoch'))
-
     trainer.callbacks.append(
         LossNoDropoutMonitor(stage='valid', logger=logger,
                              logging_interval='epoch'))
+    #
+    # # LogAUC monitors
+    # trainer.callbacks.append(
+    #     LogAUCMonitor(stage='train', logger=logger, logging_interval='epoch'))
+    # trainer.callbacks.append(
+    #     LogAUCMonitor(stage='valid', logger=logger, logging_interval='epoch'))
+    # trainer.callbacks.append(
+    #     LogAUCNoDropoutMonitor(stage='valid', logger=logger,
+    #                            logging_interval='epoch'))
+    #
+    # # PPV monitors
+    # trainer.callbacks.append(
+    #     PPVMonitor(stage='train', logger=logger, logging_interval='epoch'))
+    # trainer.callbacks.append(
+    #     PPVMonitor(stage='valid', logger=logger, logging_interval='epoch'))
+    # trainer.callbacks.append(
+    #     PPVNoDropoutMonitor(stage='valid', logger=logger,
+    #                         logging_interval='epoch'))
 
-    # LogAUC monitors
+    # Accuracy monitors
     trainer.callbacks.append(
-        LogAUCMonitor(stage='train', logger=logger, logging_interval='epoch'))
+        AccuracyMonitor(stage='train', logger=logger,
+                        logging_interval='epoch'))
     trainer.callbacks.append(
-        LogAUCMonitor(stage='valid', logger=logger, logging_interval='epoch'))
+        AccuracyMonitor(stage='valid', logger=logger,
+                        logging_interval='epoch'))
+    trainer.callbacks.append(
+        AccuracyNoDropoutMonitor(stage='valid', logger=logger,
+                        logging_interval='epoch'))
 
-    # PPV monitors
-    trainer.callbacks.append(
-        PPVMonitor(stage='train', logger=logger, logging_interval='epoch'))
-    trainer.callbacks.append(
-        PPVMonitor(stage='valid', logger=logger, logging_interval='epoch'))
 
     # Learning rate monitors
-    trainer.callbacks.append(LearningRateMonitor(logging_interval='step'))
+    # trainer.callbacks.append(LearningRateMonitor(logging_interval='step'))
     trainer.callbacks.append(LearningRateMonitor(logging_interval='epoch'))
 
     if args.test:
@@ -141,7 +168,8 @@ def actual_training(model, data_module, args):
         print(f'In Training Mode:')
         trainer.fit(model=model, datamodule=data_module)
 
-def main(gnn_type, logger):
+
+def main(gnn_type):
     """
     the main process that defines model and data
     also trains and evaluate the model
@@ -176,11 +204,11 @@ def main(gnn_type, logger):
 
 
 if __name__ == '__main__':
-    gnn_type = 'gcn'  # The reason that gnn_type cannot be a cmd line
+    gnn_type = 'kgnn'  # The reason that gnn_type cannot be a cmd line
     # argument is that model specific arguments depends on it
 
     task = Task.init(project_name=f"Tests/{gnn_type}",
-                     task_name="working",
+                     task_name="improving_performance",
                      tags=[gnn_type, "debug"])
     logger = task.get_logger()
-    main(gnn_type, logger)
+    main(gnn_type)
