@@ -4,7 +4,8 @@
 from data import DataLoaderModule, get_dataset
 from model import GNNModel
 from monitors import LossMonitor, LossNoDropoutMonitor, LogAUCMonitor, \
-    LogAUCNoDropoutMonitor, PPVMonitor, PPVNoDropoutMonitor, AccuracyMonitor
+    LogAUCNoDropoutMonitor, PPVMonitor, PPVNoDropoutMonitor, \
+    AccuracyMonitor, AccuracyNoDropoutMonitor
 
 from argparse import ArgumentParser
 from pprint import pprint
@@ -104,13 +105,14 @@ def actual_training(model, data_module, args):
     trainer = pl.Trainer.from_argparse_args(args)
     trainer.callbacks.append(actual_training_checkpoint_callback)
     print(f'max_epoch:{trainer.max_epochs}')
+
+
     # Loss monitors
     trainer.callbacks.append(
         LossMonitor(stage='train', logger=logger, logging_interval='step'))
     trainer.callbacks.append(
         LossMonitor(stage='train', logger=logger,
                     logging_interval='epoch'))
-
     trainer.callbacks.append(
         LossMonitor(stage='valid', logger=logger, logging_interval='step'))
     trainer.callbacks.append(
@@ -119,29 +121,36 @@ def actual_training(model, data_module, args):
     trainer.callbacks.append(
         LossNoDropoutMonitor(stage='valid', logger=logger,
                              logging_interval='epoch'))
-
-    # LogAUC monitors
-    trainer.callbacks.append(
-        LogAUCMonitor(stage='train', logger=logger, logging_interval='epoch'))
-    trainer.callbacks.append(
-        LogAUCMonitor(stage='valid', logger=logger, logging_interval='epoch'))
-    trainer.callbacks.append(
-        LogAUCNoDropoutMonitor(stage='valid', logger=logger,
-                               logging_interval='epoch'))
-
-    # PPV monitors
-    trainer.callbacks.append(
-        PPVMonitor(stage='train', logger=logger, logging_interval='epoch'))
-    trainer.callbacks.append(
-        PPVMonitor(stage='valid', logger=logger, logging_interval='epoch'))
-    trainer.callbacks.append(
-        PPVNoDropoutMonitor(stage='valid', logger=logger,
-                            logging_interval='epoch'))
+    #
+    # # LogAUC monitors
+    # trainer.callbacks.append(
+    #     LogAUCMonitor(stage='train', logger=logger, logging_interval='epoch'))
+    # trainer.callbacks.append(
+    #     LogAUCMonitor(stage='valid', logger=logger, logging_interval='epoch'))
+    # trainer.callbacks.append(
+    #     LogAUCNoDropoutMonitor(stage='valid', logger=logger,
+    #                            logging_interval='epoch'))
+    #
+    # # PPV monitors
+    # trainer.callbacks.append(
+    #     PPVMonitor(stage='train', logger=logger, logging_interval='epoch'))
+    # trainer.callbacks.append(
+    #     PPVMonitor(stage='valid', logger=logger, logging_interval='epoch'))
+    # trainer.callbacks.append(
+    #     PPVNoDropoutMonitor(stage='valid', logger=logger,
+    #                         logging_interval='epoch'))
 
     # Accuracy monitors
     trainer.callbacks.append(
+        AccuracyMonitor(stage='train', logger=logger,
+                        logging_interval='epoch'))
+    trainer.callbacks.append(
         AccuracyMonitor(stage='valid', logger=logger,
                         logging_interval='epoch'))
+    trainer.callbacks.append(
+        AccuracyNoDropoutMonitor(stage='valid', logger=logger,
+                        logging_interval='epoch'))
+
 
     # Learning rate monitors
     # trainer.callbacks.append(LearningRateMonitor(logging_interval='step'))

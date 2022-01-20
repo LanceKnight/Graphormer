@@ -179,3 +179,14 @@ class AccuracyMonitor(MetricMonitor):
                                                   title=f'accuracy_by_'
                                                         f'{logging_interval}')
 
+
+class AccuracyNoDropoutMonitor(MetricMonitor):
+    def __init__(self, stage='valid', logger =None, logging_interval=None,
+                 title = None ):
+        super(AccuracyNoDropoutMonitor, self).__init__(stage=stage,
+                                                  metric="accuracy_no_dropout",
+                                                  logger=logger,
+                                                  logging_interval=logging_interval,
+                                                  title=f'accuracy_by_'
+                                                        f'{logging_interval}',
+                                              series='no_dropout')

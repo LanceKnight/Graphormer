@@ -118,8 +118,10 @@ class GNNModel(pl.LightningModule):
         numpy_y = true_y.cpu().numpy()
         logAUC = calculate_logAUC(numpy_y, numpy_prediction)
         ppv = calculate_ppv(numpy_y, numpy_prediction)
+        accuracy = calculate_accuracy(numpy_y, numpy_prediction)
 
-        return {"loss": loss, "logAUC": logAUC, "ppv": ppv, }
+        return {"loss": loss, "logAUC": logAUC, "ppv": ppv,
+                "accuracy":accuracy}
 
 
     def training_epoch_end(self, train_step_outputs):

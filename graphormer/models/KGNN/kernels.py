@@ -763,10 +763,13 @@ class BaseKernelSetConv(Module):
 
 
 class KernelSetConv(BaseKernelSetConv):
+    """
+    Do the convolution on kernels of degree 1 to 4.
+    """
     def __init__(self, L1, L2, L3, L4, D, node_attr_dim, edge_attr_dim):
         self.L = [L1, L2, L3, L4]
 
-        # test of std kernel
+        # Test of std kernel
         p_support = torch.tensor([[1.2990e+00, 7.5000e-01]]).unsqueeze(0)
         # print(p_support)
 

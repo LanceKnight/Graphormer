@@ -198,6 +198,18 @@ class MolGCN(MessagePassing):
             # print(f'layer time:{end-start}')
         return h
 
+
+
+    def get_kernels(self, layer_id, degree, file_name):
+        # TODO: not working yet 
+        kernel_set_conv = self.layers[layer_id]
+        x_center1 = kernel_set_conv.kernelconv1.x_center
+        x_support = kernel_set_conv.x_support
+        p_support = kernel_set_conv.p_support
+        kernels = {}
+
+
+
     def message(self, sim_sc_j):
         # print(f'sim_sc_j:{sim_sc_j.shape}')
         return sim_sc_j

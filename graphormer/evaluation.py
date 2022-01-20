@@ -98,9 +98,13 @@ def calculate_accuracy(true_y, predicted_score):
 
     tn, fp, fn, tp = confusion_matrix(
         true_y, predicted_y, labels=[0, 1]).ravel()
-    print(f'\ntn:{tn}, fp:{fp}, fn:{fn}, tp:{tp}, tp+fp:{tp + fp}')
+
     if (tp + fp + tn + fn) != 0:
         accuracy = ((tp + tn) / (tp + fp + tn + fn))
+        print(f'\ntn:{tn}, fp:{fp}, fn:{fn}, tp:{tp}, all:'
+              f'{tp + fp + tn + fn}, accuracy:{accuracy}')
     else:
         accuracy = np.NAN
+        print(f'\ntn:{tn}, fp:{fp}, fn:{fn}, tp:{tp}, all:'
+              f'{tp + fp + tn + fn}, accuracy:NAN')
     return accuracy
